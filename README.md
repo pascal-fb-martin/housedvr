@@ -28,7 +28,7 @@ This service depends on the House series environment:
 
 ## Configuration
 
-This service takes the following specific options:
+This service takes the following specific command line options:
 
 * -dvr-store=PATH: the full path where the video recording files are stored.
 * -dvr-clean=NN: the disk usage level (percentage) at which the oldest files are being deleted. HouseDvr will delete files until the disk utilization falls below this limit.
