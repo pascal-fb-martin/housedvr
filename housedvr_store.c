@@ -440,15 +440,17 @@ void housedvr_store_background (time_t now) {
         // Scan every minute for disk full.
 
         if (HouseDvrMaxSpace > 0) {
-            struct statvfs storage;
             for (;;) {
+                struct statvfs storage;
                 if (statvfs (HouseDvrStorage, &storage)) break;
 
                 if (storage.f_bavail >
                         (HouseDvrMaxSpace * storage.f_blocks) / 100) break;
+
                 DEBUG ("Proceeding with disk cleanup (disk %d%% full)\n",
                        ((storage.f_blocks - storage.f_bavail) * 100) / storage.f_blocks);
                 housedvr_store_cleanup();
+                break;
             }
         }
 
