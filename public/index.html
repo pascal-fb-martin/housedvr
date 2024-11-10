@@ -96,6 +96,10 @@ function drawDayEvents (data) {
    var table = document.createElement("table");
    var row = document.createElement("tr");
 
+   data = data.sort (function (a, b) {
+      return a.time.localeCompare(b.time);
+   });
+
    var column = 0;
    for (var i = 0; i < data.length; i++) {
       column ++;
