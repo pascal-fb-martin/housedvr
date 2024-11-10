@@ -68,11 +68,11 @@ static const char *dvr_status (const char *method, const char *uri,
 
     cursor += snprintf (buffer, sizeof(buffer),
                         "{\"host\":\"%s\",\"proxy\":\"%s\",\"timestamp\":%d,"
-                            "\"dvr\":{\"sources\":",
+                            "\"dvr\":{",
                         HostName, houseportal_server(), (long)time(0));
 
     cursor += housedvr_feed_status (buffer+cursor, sizeof(buffer)-cursor);
-    cursor += snprintf (buffer+cursor, sizeof(buffer)-cursor, ",\"disk\":");
+    cursor += snprintf (buffer+cursor, sizeof(buffer)-cursor, ",");
     cursor += housedvr_store_status (buffer+cursor, sizeof(buffer)-cursor);
     cursor += snprintf (buffer+cursor, sizeof(buffer)-cursor, "}}");
     echttp_content_type_json ();
@@ -96,6 +96,7 @@ static void dvr_background (int fd, int mode) {
     }
     housedvr_store_background(now);
     housedvr_feed_background(now);
+    housediscover (now);
     houselog_background (now);
     housediscover (now);
 }
@@ -121,11 +122,12 @@ int main (int argc, const char **argv) {
 
     echttp_default ("-http-service=dynamic");
 
-    echttp_open (argc, argv);
+    argc = echttp_open (argc, argv);
     if (echttp_dynamic_port()) {
         houseportal_initialize (argc, argv);
         use_houseportal = 1;
     }
+    housediscover_initialize (argc, argv);
     houselog_initialize ("dvr", argc, argv);
 
     echttp_cors_allow_method("GET");

@@ -71,16 +71,15 @@
 
 #define DEBUG if (echttp_isdebug()) printf
 
-#define MAX_FEED 64 // More than this amount of video feed around a home?
-
 typedef struct {
     char   url[256];
     char   space[16];
     time_t timestamp;
 } ServerRegistration;
 
-static ServerRegistration Servers[MAX_FEED];
-static int                  ServersCount = 0;
+static ServerRegistration *Servers = 0;
+static int                 ServersCount = 0;
+static int                 ServersSize = 0;
 
 typedef struct {
     char  *name;
@@ -88,8 +87,9 @@ typedef struct {
     time_t timestamp;
 } FeedRegistration;
 
-static FeedRegistration Feeds[MAX_FEED];
-static int              FeedsCount = 0;
+static FeedRegistration *Feeds = 0;
+static int               FeedsCount = 0;
+static int               FeedsSize = 0;
 
 static const char *HouseFeedService = "cctv"; // Default is security DVR.
 
@@ -110,7 +110,10 @@ static int housedvr_feed_server (const char *url, const char *space) {
         new = 0;
     } else {
         if (new < 0) {
-            if (ServersCount >= MAX_FEED) return 0;
+            if (ServersCount >= ServersSize) {
+                ServersSize += 16;
+                Servers = realloc (Servers, ServersSize * sizeof(Servers[0]));
+            }
             i = ServersCount++;
         } else {
             i = new;
@@ -137,7 +140,10 @@ static int housedvr_feed_register (const char *name, const char *url) {
     }
     if (i < 0) {
         if (new < 0) {
-            if (FeedsCount >= MAX_FEED) return 0;
+            if (FeedsCount >= FeedsSize) {
+                FeedsSize += 16;
+                Feeds = realloc (Feeds, FeedsSize * sizeof(Feeds[0]));
+            }
             i = FeedsCount++;
         } else {
             i = new;

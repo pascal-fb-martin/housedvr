@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Live Video</title>
+<link rel=stylesheet type="text/css" href="/house.css" title="House">
+<script language="javascript" type="text/javascript">
+
+var currentCameras = null;
+
+function getCameras (callback) {
+   var command = new XMLHttpRequest();
+   command.open("GET", "/dvr/status");
+   command.onreadystatechange = function () {
+      if (command.readyState === 4 && command.status === 200) {
+         var type = command.getResponseHeader("Content-Type");
+         var data = JSON.parse(command.responseText);
+         callback(data.dvr.feed);
+      }
+   }
+   command.send(null);
+}
+
+function drawCameras (data) {
+   var canvas = document.getElementsByClassName ('mosaic')[0];
+
+   // Remove current content.
+   while (canvas.childNodes.length > 1) {
+      canvas.removeChild(canvas.childNodes[1]);
+   }
+
+   // What is the size of the screen?
+   var width = window.innerWidth;
+   var imageColumns = 3; // default for large windows.
+
+   if (width < 1550) {
+      if (width > 1100)
+         imageColumns = imageColumns - 1;
+      else if (width > 800)
+         imageColumns = imageColumns - 2;
+      else
+         imageColumns = 1;
+   }
+   var imageWidth = Math.floor((width / imageColumns) * 0.97) - 6;
+
+   for (var i = 0; i < data.length; i++) {
+      var link = document.createElement("a");
+      link.href = '/live.html?camera=' + data[i].name;
+      var video = document.createElement("img");
+      video.className = "video";
+      video.src = 'http://' + data[i].url + '/';
+      video.width = imageWidth;
+      video.border = 3;
+      video.style.borderColor = 'white';
+      link.appendChild(video);
+      canvas.appendChild(link);
+   }
+}
+
+function showCameras () {
+   getCameras (function (data) {
+      drawCameras(data);
+      currentCameras = data;
+   });
+}
+
+function resizeCameras () {
+   if (currentCameras) {
+      drawCameras(currentCameras);
+   }
+}
+
+window.onload = showCameras;
+window.onresize = resizeCameras;
+</script>
+</head>
+<body>
+   <table class="housetopcontainer">
+   <tr><td>
+   <table class="housetop">
+   <tr>
+   <td><a href="/dvr/index.html">DVR</a></td>
+   <td><span>Cameras</span></td>
+   <td><a href="/dvr/status.html">Status</a></td>
+   <td><a href="/dvr/events.html">Events</a></td>
+   </tr>
+   </table>
+   </td></tr>
+   </table>
+<center>
+<div class="mosaic">
+</div>
+</center>
+</body>
+</html>
+

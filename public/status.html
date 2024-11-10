@@ -1,0 +1,193 @@
+<html>
+<head>
+<title>DVR Home</title>
+<link rel=stylesheet type="text/css" href="/house.css" title="House">
+<script language="javascript" type="text/javascript">
+
+function friendlySize (size) {
+      var unit = 'B';
+
+      if (size > 1024) {
+         size = Math.round(size / 1024);
+         unit = 'K';
+         if (size > 1024) {
+             size = Math.round(size / 1024);
+             unit = 'M';
+             if (size > 1024) {
+                size = Math.round(size / 1024);
+                unit = 'G';
+             }
+         }
+      }
+      return size + ' ' + unit;
+}
+
+function listServers (data) {
+   var table = document.getElementsByClassName ('servers')[0];
+
+   for (var i = 0; i < data.dvr.servers.length; i++) {
+      var line = document.createElement("tr");
+      var server = data.dvr.servers[i];
+
+      var column = document.createElement("td");
+      var link = document.createElement("a");
+      link.href = 'http://' + server.url + '/';
+      link.innerHTML = link.href;
+      column.appendChild(link);
+      line.appendChild(column);
+
+      column = document.createElement("td");
+      column.innerHTML = server.space;
+      line.appendChild(column);
+
+      column = document.createElement("td");
+      column.innerHTML = server.timestamp;
+      line.appendChild(column);
+
+      table.appendChild(line);
+   }
+}
+
+function listCameras (data) {
+   var table = document.getElementsByClassName ('cameras')[0];
+
+   for (var i = 0; i < data.dvr.feed.length; i++) {
+      var line = document.createElement("tr");
+      var feed = data.dvr.feed[i];
+
+      var column = document.createElement("td");
+      column.innerHTML = feed.name;
+      line.appendChild(column);
+
+      column = document.createElement("td");
+      var link = document.createElement("a");
+      link.href = 'http://' + feed.url + '/';
+      link.innerHTML = link.href;
+      column.appendChild(link);
+      line.appendChild(column);
+
+      column = document.createElement("td");
+      column.innerHTML = feed.timestamp;
+      line.appendChild(column);
+
+      table.appendChild(line);
+   }
+}
+
+function friendlySize (size) {
+      var unit = 'B';
+
+      if (size > 1024) {
+         size = Math.round(size / 1024);
+         unit = 'K';
+         if (size > 1024) {
+             size = Math.round(size / 1024);
+             unit = 'M';
+             if (size > 1024) {
+                size = Math.round(size / 1024);
+                unit = 'G';
+             }
+         }
+      }
+      return size + ' ' + unit;
+}
+
+function listStorage (data) {
+   var table = document.getElementsByClassName ('storage')[0];
+
+   for (var i = 0; i < data.dvr.storage.length; i++) {
+      var line = document.createElement("tr");
+
+      var column = document.createElement("td");
+      column.innerHTML = data.dvr.storage[i].path;
+      line.appendChild(column);
+
+      column = document.createElement("td");
+      column.innerHTML = friendlySize (data.dvr.storage[i].size);
+      line.appendChild(column);
+
+      column = document.createElement("td");
+      column.innerHTML = data.dvr.storage[i].used + '%';
+      line.appendChild(column);
+
+      column = document.createElement("td");
+      column.innerHTML = friendlySize (data.dvr.storage[i].free);
+      line.appendChild(column);
+
+      table.appendChild(line);
+   }
+}
+
+function showAll (data) {
+   listCameras(data);
+   listStorage(data);
+}
+
+function updateDvr () {
+   var command = new XMLHttpRequest();
+   command.open("GET", "/dvr/status");
+   command.onreadystatechange = function () {
+      if (command.readyState === 4 && command.status === 200) {
+         var type = command.getResponseHeader("Content-Type");
+         showAll((JSON.parse(command.responseText)));
+      }
+   }
+   command.send(null);
+}
+
+window.onload = updateDvr;
+</script>
+</head>
+<body>
+   <table class="housetopcontainer">
+   <tr><td>
+   <table class="housetop">
+   <tr>
+   <td><a href="/dvr/index.html">DVR</a></td>
+   <td><a href="/dvr/mosaic.html">Camera</a></td>
+   <td><span>Status</span></td>
+   <td><a href="/dvr/events.html">Events</a></td>
+   </tr>
+   </table>
+   </td></tr>
+   </table>
+   <center>
+   <p>
+   <h1>Servers</h1>
+   <table class="housewidetable servers" border="0">
+      <tr>
+         <th width="55%">SERVER</th>
+         <th width="10%">AVAILABLE</th>
+         <th width="20%">UPDATED</th>
+      </tr>
+   </table>
+   </p>
+   <br>
+   <br>
+   <p>
+   <h1>Cameras</h1>
+   <table class="housewidetable camera" border="0">
+      <tr>
+         <th width="25%">CAMERA</th>
+         <th width="50%">URL</th>
+         <th width="25%">UPDATED</th>
+      </tr>
+   </table>
+   </p>
+   <br>
+   <br>
+   <p>
+   <h1>Storage</h1>
+   <table class="housewidetable storage" border="0">
+      <tr>
+         <th width="70%">VOLUME</th>
+         <th width="10%">SIZE</th>
+         <th width="10%">USED</th>
+         <th width="10%">AVAILABLE</th>
+      </tr>
+   </table>
+   </p>
+   </center>
+</body>
+</html>
+

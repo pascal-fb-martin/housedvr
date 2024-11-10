@@ -131,7 +131,7 @@ static const char *dvr_store_yearly (const char *method, const char *uri,
                 found = ",true";
             }
         }
-        cursor += snprintf (buffer+cursor, sizeof(buffer)-cursor, ",%s", found);
+        cursor += snprintf (buffer+cursor, sizeof(buffer)-cursor, "%s", found);
         if (cursor >= sizeof(buffer)) goto nospace;
     }
     cursor += snprintf (buffer+cursor, sizeof(buffer)-cursor, "]");
@@ -161,7 +161,9 @@ static const char *dvr_store_monthly (const char *method, const char *uri,
     if (month[0] == '0') month += 1;
 
     struct tm local;
-    local.tm_sec = local.tm_min = local.tm_hour = 0;
+    // The reference time must be slightly past 2 AM to avoid being fooled
+    // by a daylight saving time change in the fall.
+    local.tm_sec = local.tm_min = local.tm_hour = 2; // 2:02:02 AM
     local.tm_mday = 1;
     local.tm_mon = atoi(month)-1;
     local.tm_year = atoi(year)-1900;
@@ -180,7 +182,7 @@ static const char *dvr_store_monthly (const char *method, const char *uri,
     int  tail = snprintf (path, sizeof(path), "%s/%s/%02d/",
                           HouseDvrStorage, year, local.tm_mon+1);
 
-    for (i = 0; i < 31; ++i) {
+    for (i = 1; i < 31; ++i) {
         const char *found = ",false";
         snprintf (path+tail, sizeof(path)-tail, "%02d", local.tm_mday);
         if (!stat (path, &info)) {
@@ -235,9 +237,13 @@ static const char *dvr_store_daily (const char *method, const char *uri,
     const char *sep = "";
     cursor = snprintf (buffer, sizeof(buffer), "[");
 
-    struct dirent *p = readdir(dir);
-    while (p) {
+    for (;;) {
         char name[1024];
+
+        struct dirent *p = readdir(dir);
+        if (!p) break;
+        if (p->d_name[0] == '.') continue;
+
         strncpy (name, p->d_name, sizeof(name));
         char *s = strrchr (name, '.');
         if (!s) continue;
@@ -257,15 +263,18 @@ static const char *dvr_store_daily (const char *method, const char *uri,
         info.st_size = 0;
         stat (path, &info);
 
+        char image[1024];
+        snprintf (image, sizeof(image), "%s", p->d_name);
+        s = strrchr (image, '.');
+        if (s) snprintf (s, sizeof(image)-(s-image), "%s", ".jpg");
+
         cursor += snprintf (buffer+cursor, sizeof(buffer)-cursor,
                             "%s{\"src\":\"%s\",\"time\":\"%s\",\"size\":%ld"
-                                ",\"uri\":\"%s/%s\"}",
+                                ",\"video\":\"%s/%s\",\"image\":\"%s/%s\"}",
                             sep, src, dtime, (long)(info.st_size),
-                            vuri, p->d_name); 
+                            vuri, p->d_name, vuri, image); 
         sep = ",";
         if (cursor >= sizeof(buffer)) goto nospace;
-
-        p = readdir(dir);
     }
 
     cursor += snprintf (buffer+cursor, sizeof(buffer)-cursor, "]");
@@ -310,10 +319,11 @@ int housedvr_store_status (char *buffer, int size) {
 
     if (statvfs (HouseDvrStorage, &storage)) return 0;
 
-    cursor = snprintf (buffer, size, "\"storage\":{\"path\":\"%s\", \"size\":%ld, \"free\":%ld}",
+    cursor = snprintf (buffer, size, "\"storage\":[{\"path\":\"%s\", \"used\":%ld, \"size\":%lld, \"free\":%lld}]",
                        HouseDvrStorage,
-                       (long)(storage.f_frsize * storage.f_blocks),
-                       (long)(storage.f_frsize * storage.f_bavail));
+                       (long)(((storage.f_blocks - storage.f_bavail) * 100) / storage.f_blocks),
+                       (long long)storage.f_frsize * storage.f_blocks,
+                       (long long)storage.f_frsize * storage.f_bavail);
     if (cursor >= size) goto overflow;
 
     return cursor;
@@ -329,27 +339,29 @@ static int housedvr_store_oldest (const char *parent) {
     int oldest = 9999;
 
     DIR *dir = opendir (parent);
-    if (dir) {
-        struct dirent *p = readdir(dir);
-        while (p) {
-            if ((p->d_type == DT_DIR) && (isdigit(p->d_name[0]))) {
-                const char *name = p->d_name;
-                int i = atoi ((name[0] == '0')?name+1:name);
-                if (i < oldest) oldest = i;
-            }
-            p = readdir(dir);
+    if (!dir) return 0;
+
+    struct dirent *p = readdir(dir);
+    while (p) {
+        if ((p->d_type == DT_DIR) && (isdigit(p->d_name[0]))) {
+            const char *name = p->d_name;
+            int i = atoi ((name[0] == '0')?name+1:name);
+            if (i < oldest) oldest = i;
         }
-        closedir (dir);
+        p = readdir(dir);
     }
+    closedir (dir);
+    if (oldest == 9999) return 0; // Found nothing.
     return oldest;
 }
 
-static int housedvr_store_delete (const char *parent) {
+static void housedvr_store_delete (const char *parent) {
 
     char path[512];
     int oldest = 9999;
 
     DEBUG ("delete %s\n", parent);
+return; // DEBUG: avoid destructive behavior before we tested the check leading to this.
     DIR *dir = opendir (path);
     if (dir) {
         struct dirent *p = readdir(dir);
@@ -365,7 +377,6 @@ static int housedvr_store_delete (const char *parent) {
         }
         closedir (dir);
     }
-    return oldest;
 }
 
 static void housedvr_store_cleanup (void) {
@@ -376,11 +387,11 @@ static void housedvr_store_cleanup (void) {
     int oldestday;
 
     oldestyear = housedvr_store_oldest (HouseDvrStorage);
-    if (oldestyear == 9999) return; // No video.
+    if (!oldestyear) return; // No video.
 
     snprintf (path, sizeof(path), "%s/%d", HouseDvrStorage, oldestyear);
     oldestmonth = housedvr_store_oldest (path);
-    if (oldestmonth == 9999) {
+    if (!oldestmonth) {
         housedvr_store_delete (path);
         houselog_event ("DIRECTORY", path, "DELETED", "EMPTY");
         return;
@@ -390,7 +401,7 @@ static void housedvr_store_cleanup (void) {
               "%s/%d/%02d", HouseDvrStorage, oldestyear, oldestmonth);
     oldestday = housedvr_store_oldest (path);
 
-    if (oldestday == 9999) {
+    if (!oldestday) {
         housedvr_store_delete (path);
         houselog_event ("DIRECTORY", path, "DELETED", "EMPTY");
         return;
@@ -434,7 +445,8 @@ void housedvr_store_background (time_t now) {
             for (;;) {
                 if (statvfs (HouseDvrStorage, &storage)) break;
 
-                if (storage.f_bavail > storage.f_blocks / 10) break;
+                if (storage.f_bavail >
+                        (HouseDvrMaxSpace * storage.f_blocks) / 100) break;
                 DEBUG ("Proceeding with disk cleanup (disk %d%% full)\n",
                        ((storage.f_blocks - storage.f_bavail) * 100) / storage.f_blocks);
                 housedvr_store_cleanup();
@@ -443,10 +455,12 @@ void housedvr_store_background (time_t now) {
 
         struct tm *local = localtime (&now);
         if (local) {
-            if (local->tm_mday != lastday) {
+            int today = local->tm_mday;
+            if (today != lastday) {
                 housedvr_store_link ("Today", local);
                 time_t yesterday = now - 86400;
                 housedvr_store_link ("Yesterday", localtime (&yesterday));
+                lastday = today;
             }
         }
         lastcheck = now;

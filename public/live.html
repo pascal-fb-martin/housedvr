@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title class="title">Live Video</title>
+<link rel=stylesheet type="text/css" href="/house.css" title="House">
+<script language="javascript" type="text/javascript">
+
+var currentCameras = null;
+
+function getCameras (callback) {
+   var command = new XMLHttpRequest();
+   command.open("GET", "/dvr/status");
+   command.onreadystatechange = function () {
+      if (command.readyState === 4 && command.status === 200) {
+         var type = command.getResponseHeader("Content-Type");
+         var data = JSON.parse(command.responseText);
+         callback(data.dvr.feed);
+      }
+   }
+   command.send(null);
+}
+
+function drawCamera (data) {
+   var canvas = document.getElementsByClassName ('live')[0];
+
+   // Remove all current content.
+   while (canvas.childNodes.length > 1) {
+      canvas.removeChild(canvas.childNodes[1]);
+   }
+
+   var url = new URL(location.href);
+   var camera = url.searchParams.get("camera");
+
+   for (var i = 0; i < data.length; i++) {
+      if (data[i].name == camera) {
+         var video = document.createElement("img");
+         video.className = "video";
+         video.src = 'http://' + data[i].url + '/';
+         video.width = window.innerWidth;
+         video.border = 3;
+         video.style.borderColor = 'white';
+         canvas.appendChild(video);
+      }
+   }
+   var title = document.getElementsByClassName ('title')[0];
+   title.innerHTML = camera + ' live';
+}
+
+function showCamera () {
+   getCameras (function (data) {
+      drawCamera(data);
+      currentCameras = data;
+   });
+}
+
+function resizeCamera () {
+   if (currentCameras) {
+      drawCamera(currentCameras);
+   }
+}
+
+window.onload = showCamera;
+window.onresize = resizeCamera;
+</script>
+</head>
+<body>
+   <table class="housetopcontainer">
+   <tr><td>
+   <table class="housetop">
+   <tr>
+   <td><a href="/dvr/index.html">DVR</a></td>
+   <td><a href="/dvr/mosaic.html">Cameras</a></td>
+   <td><a href="/dvr/status.html">Status</a></td>
+   <td><a href="/dvr/events.html">Events</a></td>
+   </tr>
+   </table>
+   </td></tr>
+   </table>
+
+   <center>
+      <div class="live">
+      </div>
+   </center>
+</body>
+</html>
+
