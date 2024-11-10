@@ -91,6 +91,7 @@ static const char *dvr_store_top (const char *method, const char *uri,
                 cursor += snprintf (buffer+cursor, sizeof(buffer)-cursor,
                                     "%s%d", sep, p->d_name);
                 if (cursor >= sizeof(buffer)) goto nospace;
+                sep = ",";
             }
             p = readdir(dir);
         }
@@ -309,6 +310,27 @@ void housedvr_store_initialize (int argc, const char **argv) {
     echttp_static_route (HouseDvrUri, HouseDvrStorage);
 }
 
+// Calculate storage space information (total, free, %used).
+// Using the statvfs data is tricky because there are two different units:
+// fragments and blocks, which can have different sizes. This code strictly
+// follows the documentation in "man statvfs".
+// The problem is compounded by these sizes being the same value for ext4,
+// making it difficult to notice mistakes..
+//
+static long long housedvr_store_free (const struct statvfs *fs) {
+    return (long long)(fs->f_bavail) * fs->f_bsize;
+}
+
+static long long housedvr_store_total (const struct statvfs *fs) {
+    return (long long)(fs->f_blocks) * fs->f_frsize;
+}
+
+static int housedvr_store_used (const struct statvfs *fs) {
+
+    long long total = housedvr_store_total (fs);
+    return (int)(((total - housedvr_store_free(fs)) * 100) / total);
+}
+
 int housedvr_store_status (char *buffer, int size) {
 
     int i;
@@ -319,11 +341,11 @@ int housedvr_store_status (char *buffer, int size) {
 
     if (statvfs (HouseDvrStorage, &storage)) return 0;
 
-    cursor = snprintf (buffer, size, "\"storage\":[{\"path\":\"%s\", \"used\":%ld, \"size\":%lld, \"free\":%lld}]",
+    cursor = snprintf (buffer, size, "\"storage\":[{\"path\":\"%s\", \"used\":%d, \"size\":%lld, \"free\":%lld}]",
                        HouseDvrStorage,
-                       (long)(((storage.f_blocks - storage.f_bavail) * 100) / storage.f_blocks),
-                       (long long)storage.f_frsize * storage.f_blocks,
-                       (long long)storage.f_frsize * storage.f_bavail);
+                       housedvr_store_used (&storage),
+                       housedvr_store_total (&storage),
+                       housedvr_store_free (&storage));
     if (cursor >= size) goto overflow;
 
     return cursor;
@@ -357,22 +379,24 @@ static int housedvr_store_oldest (const char *parent) {
 
 static void housedvr_store_delete (const char *parent) {
 
-    char path[512];
+    char path[1024];
     int oldest = 9999;
 
     DEBUG ("delete %s\n", parent);
-    DIR *dir = opendir (path);
+    DIR *dir = opendir (parent);
     if (dir) {
-        struct dirent *p = readdir(dir);
-        while (p) {
+        for (;;) {
+            struct dirent *p = readdir(dir);
+            if (!p) break;
             if (!strcmp(p->d_name, ".")) continue;
             if (!strcmp(p->d_name, "..")) continue;
             snprintf (path, sizeof(path), "%s/%s", parent, p->d_name);
             if (p->d_type == DT_DIR) {
                 housedvr_store_delete (path);
+                rmdir (path);
+            } else {
+                unlink (path);
             }
-            remove (path);
-            p = readdir(dir);
         }
         closedir (dir);
     }
@@ -380,7 +404,7 @@ static void housedvr_store_delete (const char *parent) {
 
 static void housedvr_store_cleanup (void) {
 
-    char path[512];
+    char path[1024];
     int oldestyear;
     int oldestmonth;
     int oldestday;
@@ -407,8 +431,11 @@ static void housedvr_store_cleanup (void) {
     }
     snprintf (path, sizeof(path), "%s/%d/%02d/%02d",
               HouseDvrStorage, oldestyear, oldestmonth, oldestday);
-    houselog_event ("DIRECTORY", path, "DELETED", "NEED DISK SPACE");
     housedvr_store_delete (path);
+
+    snprintf (path, sizeof(path), "%d/%02d/%02d",
+              oldestyear, oldestmonth, oldestday);
+    houselog_event ("DIRECTORY", path, "DELETED", "TO FREE DISK SPACE");
 }
 
 static void housedvr_store_link (const char *name, struct tm *reference) {
@@ -440,17 +467,20 @@ void housedvr_store_background (time_t now) {
         // Scan every minute for disk full.
 
         if (HouseDvrMaxSpace > 0) {
-            for (;;) {
+            // The numer of loops is limited to avoid infinit loops if the
+            // filesystem cleanup fails (or it is full for some other reason).
+            int i;
+            for (i=0; i < 10; ++i) {
                 struct statvfs storage;
                 if (statvfs (HouseDvrStorage, &storage)) break;
+                int used = housedvr_store_used (&storage);
 
-                if (storage.f_bavail >
-                        (HouseDvrMaxSpace * storage.f_blocks) / 100) break;
+                if (used <= HouseDvrMaxSpace) break;
 
                 DEBUG ("Proceeding with disk cleanup (disk %d%% full)\n",
                        ((storage.f_blocks - storage.f_bavail) * 100) / storage.f_blocks);
+                houselog_event ("DISK", HouseDvrStorage, "FULL", "%d%% USED", used);
                 housedvr_store_cleanup();
-                break;
             }
         }
 
