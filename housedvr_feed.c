@@ -286,9 +286,12 @@ static const char *dvr_feed_declare (const char *method,
                                              const char *data, int length) {
 
     const char *name = echttp_parameter_get("name");
+    const char *admin = echttp_parameter_get("admin");
     const char *url = echttp_parameter_get("url");
     const char *space = echttp_parameter_get("available");
     const char *devices = echttp_parameter_get("devices");
+
+    if (!admin) admin = url;
 
     if (name && url && space) {
         char device[128];
@@ -298,7 +301,7 @@ static const char *dvr_feed_declare (const char *method,
         int j = 0;
 
         if (housedvr_feed_server (url, space))
-            houselog_event ("SERVER", url, "ADDED", "SPACE %s", space);
+            houselog_event ("SERVER", admin, "ADDED", "AVAILABLE SPACE %s", space);
 
         for (i = 0; devices[i] > 0; ++i) {
             if (devices[i] == '+') {
