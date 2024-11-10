@@ -393,13 +393,13 @@ static void housedvr_store_delete (const char *parent) {
             snprintf (path, sizeof(path), "%s/%s", parent, p->d_name);
             if (p->d_type == DT_DIR) {
                 housedvr_store_delete (path);
-                rmdir (path);
             } else {
                 unlink (path);
             }
         }
         closedir (dir);
     }
+    rmdir (parent);
 }
 
 static void housedvr_store_cleanup (void) {
