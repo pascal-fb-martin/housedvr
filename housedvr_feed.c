@@ -72,6 +72,7 @@
 #define DEBUG if (echttp_isdebug()) printf
 
 typedef struct {
+    char   name[128];
     char   url[256];
     char   space[16];
     time_t timestamp;
@@ -94,14 +95,15 @@ static int               FeedsSize = 0;
 static const char *HouseFeedService = "cctv"; // Default is security DVR.
 
 
-static int housedvr_feed_server (const char *url, const char *space) {
+static int housedvr_feed_server (const char *name,
+                                 const char *url, const char *space) {
 
     int i;
     int new = -1;
 
     for (i = ServersCount-1; i >= 0; --i) {
-        if (Servers[i].url[0]) {
-            if (!strcmp (url, Servers[i].url)) break;
+        if (Servers[i].name[0]) {
+            if (!strcmp (name, Servers[i].name)) break;
         } else {
             new = i;
         }
@@ -118,10 +120,15 @@ static int housedvr_feed_server (const char *url, const char *space) {
         } else {
             i = new;
         }
-        strncpy (Servers[i].url, url, sizeof(Servers[i].url));
+        snprintf (Servers[i].name, sizeof(Servers[i].name), "%s", name);
         new = 1;
     }
-    strncpy (Servers[i].space, space, sizeof(Servers[i].space));
+    if (strcmp (Servers[i].url, url)) {
+        snprintf (Servers[i].url, sizeof(Servers[i].url), "%s", url);
+    }
+    if (strcmp (Servers[i].space, space)) {
+        snprintf (Servers[i].space, sizeof(Servers[i].space), "%s", space);
+    }
     Servers[i].timestamp = time(0);
     return new;
 }
@@ -153,7 +160,9 @@ static int housedvr_feed_register (const char *name, const char *url) {
     } else {
         new = 0;
     }
-    strncpy (Feeds[i].url, url, sizeof(Feeds[i].url));
+    if (strcmp (Feeds[i].url, url)) {
+        snprintf (Feeds[i].url, sizeof(Feeds[i].url), "%s", url);
+    }
     Feeds[i].timestamp = time(0);
     return new;
 }
@@ -177,8 +186,11 @@ static void housedvr_feed_prune (time_t now) {
     }
     for (i = ServersCount-1; i >= 0; --i) {
         if (Servers[i].timestamp > deadline) continue;
-        Servers[i].timestamp = 0;
-        Servers[i].url[0] = 0;
+        if (Servers[i].name) {
+            Servers[i].timestamp = 0;
+            Servers[i].name[0] = 0;
+            Servers[i].url[0] = 0;
+        }
     }
 }
 
@@ -220,19 +232,33 @@ static void housedvr_feed_discovered
        return;
    }
 
-   int feeds = echttp_json_search (tokens, ".video.status");
+   int host = echttp_json_search (tokens, ".host");
+   if (host <= 0) {
+       houselog_trace (HOUSE_FAILURE, server, "no hostname");
+       return;
+   }
+   char *hostname = tokens[host].value.string;
+
+   int feeds = echttp_json_search (tokens, ".cctv.feeds");
    if (feeds <= 0) {
        houselog_trace (HOUSE_FAILURE, server, "no feed data");
        return;
    }
 
-   int available = echttp_json_search (tokens+feeds, ".available");
+   int console = echttp_json_search (tokens, ".cctv.console");
+   if (console <= 0) {
+       houselog_trace (HOUSE_FAILURE, server, "no console URL");
+       return;
+   }
+   const char *adminweb = tokens[console].value.string;
+
+   int available = echttp_json_search (tokens, ".cctv.available");
    if (available >= 0 && tokens[feeds+available].type == PARSER_STRING) {
        space = tokens[feeds+available].value.string;
    }
 
-   if (housedvr_feed_server (server, space)) {
-       houselog_event ("SERVER", server, "ADDED", "SPACE %s", space);
+   if (housedvr_feed_server (hostname, adminweb, space)) {
+       houselog_event ("SERVER", hostname, "ADDED", "MOTION URL %s", adminweb);
    }
 
    int n = tokens[feeds].length;
@@ -249,7 +275,6 @@ static void housedvr_feed_discovered
 
    for (i = 0; i < n; ++i) {
        ParserToken *inner = tokens + feeds + innerlist[i];
-       if (!strcmp (inner->key, "available")) continue;
        if (inner->type != PARSER_STRING) continue;
 
        if (housedvr_feed_register (inner->key, inner->value.string)) {
@@ -300,8 +325,8 @@ static const char *dvr_feed_declare (const char *method,
         int i;
         int j = 0;
 
-        if (housedvr_feed_server (url, space))
-            houselog_event ("SERVER", admin, "ADDED", "AVAILABLE SPACE %s", space);
+        if (housedvr_feed_server (name, admin, space))
+            houselog_event ("SERVER", name, "ADDED", "MOTION URL %s", admin);
 
         for (i = 0; devices[i] > 0; ++i) {
             if (devices[i] == '+') {
@@ -341,10 +366,10 @@ int housedvr_feed_status (char *buffer, int size) {
         if (!Servers[i].timestamp) continue;
 
         cursor += snprintf (buffer+cursor, size-cursor,
-                            "%s{\"url\":\"%s\",\"space\":\"%s\""
-                                ",\"timestamp\":%ld}",
-                            prefix, Servers[i].url, Servers[i].space,
-                                (long)(Servers[i].timestamp));
+                            "%s{\"name\":\"%s\",\"url\":\"%s\""
+                                ",\"space\":\"%s\",\"timestamp\":%ld}",
+                            prefix, Servers[i].name, Servers[i].url,
+                                Servers[i].space, (long)(Servers[i].timestamp));
         if (cursor >= size) goto overflow;
         prefix = ",";
     }

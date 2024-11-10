@@ -42,6 +42,10 @@ function listServers (data) {
       var server = data.dvr.servers[i];
 
       var column = document.createElement("td");
+      column.innerHTML = server.name;
+      line.appendChild(column);
+
+      column = document.createElement("td");
       var link = document.createElement("a");
       link.href = 'http://' + server.url + '/';
       link.innerHTML = link.href;
@@ -160,7 +164,8 @@ window.onload = function() {
    <h1>Servers</h1>
    <table class="housewidetable servers" border="0">
       <tr>
-         <th width="55%">SERVER</th>
+         <th width="20%">SERVER</th>
+         <th width="35%">URL</th>
          <th width="10%">AVAILABLE</th>
          <th width="20%">UPDATED</th>
       </tr>
