@@ -54,7 +54,8 @@ install-app:
 	cp public/* $(SHARE)/public/dvr
 	chown root:root $(SHARE)/public/dvr/*
 	chmod 644 $(SHARE)/public/dvr/*
-	touch /etc/default/dvr
+	rm -f /etc/default/dvr
+	touch /etc/default/housedvr
 
 uninstall-app:
 	rm -f $(HROOT)/bin/housedvr
@@ -63,7 +64,8 @@ uninstall-app:
 purge-app:
 
 purge-config:
-	rm -rf /etc/house/dvr.config /etc/default/dvr
+	rm -rf /etc/house/dvr.config /etc/default/housedvr
+	rm -f /etc/default/dvr
 
 # System installation. ------------------------------------------
 

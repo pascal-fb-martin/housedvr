@@ -361,7 +361,6 @@ static void housedvr_store_delete (const char *parent) {
     int oldest = 9999;
 
     DEBUG ("delete %s\n", parent);
-return; // DEBUG: avoid destructive behavior before we tested the check leading to this.
     DIR *dir = opendir (path);
     if (dir) {
         struct dirent *p = readdir(dir);
