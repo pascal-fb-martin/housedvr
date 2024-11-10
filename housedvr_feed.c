@@ -291,10 +291,11 @@ static const char *dvr_feed_declare (const char *method,
     const char *devices = echttp_parameter_get("devices");
 
     if (name && url && space) {
-        char device[32];
-        char feed[42];
+        char device[128];
+        char feed[128];
         char camurl[128];
-        int i, j;
+        int i;
+        int j = 0;
 
         if (housedvr_feed_server (url, space))
             houselog_event ("SERVER", url, "ADDED", "SPACE %s", space);
@@ -306,7 +307,7 @@ static const char *dvr_feed_declare (const char *method,
                 snprintf (camurl, sizeof(camurl), "%s/%s/stream", url, device);
                 if (housedvr_feed_register (feed, camurl))
                     houselog_event ("FEED", feed, "ADDED", "URL %s", camurl);
-                j = 0;
+                j = 0; // Switch to the next device.
             } else {
                 device[j++] = devices[i];
             }
@@ -333,6 +334,9 @@ int housedvr_feed_status (char *buffer, int size) {
     if (cursor >= size) goto overflow;
 
     for (i = 0; i < ServersCount; ++i) {
+ 
+        if (!Servers[i].timestamp) continue;
+
         cursor += snprintf (buffer+cursor, size-cursor,
                             "%s{\"url\":\"%s\",\"space\":\"%s\""
                                 ",\"timestamp\":%ld}",
@@ -399,13 +403,14 @@ void housedvr_feed_background (time_t now) {
     // The fast start is to make the whole network recover fast from
     // an outage, when we do not know in which order the systems start.
     // Later on, there is no need to create more traffic.
+    // The timing of the pruning mechanism is not impacted.
     //
     if (now <= latestdiscovery + 15) return;
+    housedvr_feed_prune (now);
     if (now <= latestdiscovery + 1800 && now >= starting + 60) return;
     latestdiscovery = now;
 
     DEBUG ("Proceeding with discovery of service %s\n", HouseFeedService);
     housediscovered (HouseFeedService, 0, housedvr_feed_scan);
-    housedvr_feed_prune (now);
 }
 

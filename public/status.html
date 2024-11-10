@@ -22,9 +22,21 @@ function friendlySize (size) {
       return size + ' ' + unit;
 }
 
+function friendlyTime (timestamp) {
+
+    var datetime = new Date(timestamp * 1000);
+    datetime = datetime.toLocaleString();;
+    if (datetime.indexOf(" GMT") > 0)
+        datetime = datetime.substr(0, datetime.indexOf(" GMT"));
+    return datetime;
+}
+
 function listServers (data) {
    var table = document.getElementsByClassName ('servers')[0];
 
+   for (var i = table.childNodes.length - 1; i > 1; i--) {
+       table.removeChild(table.childNodes[i]);
+   }
    for (var i = 0; i < data.dvr.servers.length; i++) {
       var line = document.createElement("tr");
       var server = data.dvr.servers[i];
@@ -37,11 +49,11 @@ function listServers (data) {
       line.appendChild(column);
 
       column = document.createElement("td");
-      column.innerHTML = server.space;
+      column.innerHTML = friendlySize(server.space);
       line.appendChild(column);
 
       column = document.createElement("td");
-      column.innerHTML = server.timestamp;
+      column.innerHTML = friendlyTime(server.timestamp);
       line.appendChild(column);
 
       table.appendChild(line);
@@ -51,6 +63,9 @@ function listServers (data) {
 function listCameras (data) {
    var table = document.getElementsByClassName ('cameras')[0];
 
+   for (var i = table.childNodes.length - 1; i > 1; i--) {
+       table.removeChild(table.childNodes[i]);
+   }
    for (var i = 0; i < data.dvr.feed.length; i++) {
       var line = document.createElement("tr");
       var feed = data.dvr.feed[i];
@@ -67,7 +82,7 @@ function listCameras (data) {
       line.appendChild(column);
 
       column = document.createElement("td");
-      column.innerHTML = feed.timestamp;
+      column.innerHTML = friendlyTime(feed.timestamp);
       line.appendChild(column);
 
       table.appendChild(line);
@@ -95,6 +110,9 @@ function friendlySize (size) {
 function listStorage (data) {
    var table = document.getElementsByClassName ('storage')[0];
 
+   for (var i = table.childNodes.length - 1; i > 1; i--) {
+       table.removeChild(table.childNodes[i]);
+   }
    for (var i = 0; i < data.dvr.storage.length; i++) {
       var line = document.createElement("tr");
 
@@ -119,11 +137,12 @@ function listStorage (data) {
 }
 
 function showAll (data) {
+   listServers(data);
    listCameras(data);
    listStorage(data);
 }
 
-function updateDvr () {
+function refreshDvr () {
    var command = new XMLHttpRequest();
    command.open("GET", "/dvr/status");
    command.onreadystatechange = function () {
@@ -135,7 +154,10 @@ function updateDvr () {
    command.send(null);
 }
 
-window.onload = updateDvr;
+window.onload = function() {
+    refreshDvr ();
+    setInterval (refreshDvr, 5000);
+};
 </script>
 </head>
 <body>
@@ -166,7 +188,7 @@ window.onload = updateDvr;
    <br>
    <p>
    <h1>Cameras</h1>
-   <table class="housewidetable camera" border="0">
+   <table class="housewidetable cameras" border="0">
       <tr>
          <th width="25%">CAMERA</th>
          <th width="50%">URL</th>
