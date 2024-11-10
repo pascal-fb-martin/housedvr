@@ -1,0 +1,19 @@
+[Unit]
+Description=the house DVR service
+After=network-online.target houseportal.service
+StartLimitIntervalSec=500
+StartLimitBurst=5
+
+[Service]
+Restart=on-failure
+RestartSec=50s
+Environment="HTTPOPTS=" "HOUSEOPTS=" "OTHEROPTS=" "OPTS="
+EnvironmentFile=-/etc/default/housegeneric
+EnvironmentFile=-/etc/default/housedvr
+EnvironmentFile=-/etc/sysconfig/housegeneric
+EnvironmentFile=-/etc/sysconfig/housedvr
+ExecStart=/usr/local/bin/housedvr $HTTPOPTS $HOUSEOPTS $OTHEROPTS $OPTS
+
+[Install]
+WantedBy=multi-user.target
+

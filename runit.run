@@ -1,0 +1,9 @@
+#!/bin/sh
+OPTS=
+HTTPOPTS=
+HOUSEOPTS=
+OTHEROPTS=
+if [ -e /etc/default/housedvr ] ; then . /etc/default/housedvr ; fi
+sv start houseportal || exit 1
+exec /usr/local/bin/housedvr $HTTPOPTS $HOUSEOPTS $OTHEROPTS $OPTS
+
