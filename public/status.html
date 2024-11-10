@@ -49,7 +49,7 @@ function listServers (data) {
       line.appendChild(column);
 
       column = document.createElement("td");
-      column.innerHTML = friendlySize(server.space);
+      column.innerHTML = server.space; // Already formatted.
       line.appendChild(column);
 
       column = document.createElement("td");
@@ -87,24 +87,6 @@ function listCameras (data) {
 
       table.appendChild(line);
    }
-}
-
-function friendlySize (size) {
-      var unit = 'B';
-
-      if (size > 1024) {
-         size = Math.round(size / 1024);
-         unit = 'K';
-         if (size > 1024) {
-             size = Math.round(size / 1024);
-             unit = 'M';
-             if (size > 1024) {
-                size = Math.round(size / 1024);
-                unit = 'G';
-             }
-         }
-      }
-      return size + ' ' + unit;
 }
 
 function listStorage (data) {
