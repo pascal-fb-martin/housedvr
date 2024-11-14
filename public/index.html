@@ -68,6 +68,27 @@ function moveItemToCenter (item) {
       item.style.top = (browserHeight - height) / 2;
 }
 
+function playVideo (link) {
+    var container = document.getElementById("videoframe");
+    var player = document.getElementById("videoplayer");
+    if (player) {
+        player.innerHTML = '<video controls autoplay mute width="' + (window.innerWidth / 2) + '" height="auto"><source src="' + link + '" type="video/mp4"></video>';
+        container.style.display = 'block';
+        container.style.width = window.innerWidth / 2;
+        container.style.height = auto;
+        container.style.left = window.innerWidth / 4;
+    }
+}
+
+function stopVideo () {
+    var container = document.getElementById("videoframe");
+    var player = document.getElementById("videoplayer");
+    if (player) {
+        player.innerHTML = '';
+        container.style.display = 'none';
+    }
+}
+
 function drawDayEvents (data) {
    var list = document.getElementsByClassName ('events')[0];
 
@@ -117,7 +138,12 @@ function drawDayEvents (data) {
       subtable.appendChild(subrow);
       subrow = document.createElement("tr");
       subitem = document.createElement("td");
-      subitem.innerHTML = '<a href="' + data[i].video + '"><img src="' + data[i].image + '" style="width:100%;"></a>';
+      subitem.id = 'video' + i;
+      if (data[i].video.match (".mp4")) {
+         subitem.innerHTML = '<img src="' + data[i].image + '" style="width:100%;" onclick="playVideo(\''+data[i].video + '\')">';
+      } else {
+         subitem.innerHTML = '<a href="' + data[i].video + '"><img src="' + data[i].image + '" style="width:100%;"></a>';
+      }
       subrow.appendChild(subitem);
       subtable.appendChild(subrow);
       item.appendChild(subtable);
@@ -282,6 +308,7 @@ window.onresize = resizeDayEvents;
    </center>
    <div class="events">
    </div>
+<div id="videoframe" style="display: none; z-index: 1000; position: fixed; top: 300px; left: 100px; border-radius: 11px; border: 3px solid #2f2f2f; background-color: #FFFFFF; opacity: 1"><center><button class="plugButton plugButtonEnabled" onclick="stopVideo()">Close</button><br><div id="videoplayer"></div></center></div>
 </body>
 </html>
 
