@@ -20,6 +20,7 @@ function previousMonth () {
    } else {
       currentDate.setMonth(currentDate.getMonth()-1);
    }
+   clearDayEvents();
    updateCalendar();
 }
 
@@ -31,6 +32,7 @@ function nextMonth () {
    } else {
       currentDate.setMonth(currentDate.getMonth()+1);
    }
+   clearDayEvents();
    updateCalendar();
 }
 
@@ -68,6 +70,15 @@ function stopVideo () {
         player.innerHTML = '';
         container.style.display = 'none';
     }
+}
+
+function clearDayEvents () {
+   var list = document.getElementsByClassName ('events')[0];
+
+   // Remove all current content.
+   while (list.childNodes.length > 1) {
+      list.removeChild(list.childNodes[1]);
+   }
 }
 
 function drawDayEvents (data) {
