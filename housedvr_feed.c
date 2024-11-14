@@ -60,12 +60,15 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <ctype.h>
+#include <sys/time.h>
 
 #include <echttp.h>
 #include <echttp_json.h>
 
-#include "houselog.h"
 #include "housediscover.h"
+#include "houselog.h"
+#include "houselog_sensor.h"
 
 #include "housedvr_feed.h"
 
@@ -327,6 +330,14 @@ static const char *dvr_feed_declare (const char *method,
 
         if (housedvr_feed_server (name, admin, space))
             houselog_event ("SERVER", name, "ADDED", "MOTION URL %s", admin);
+
+        int avail = atoi (space);
+        const char *u;
+        for (u = space; *u > 0; ++u) if (isalpha(*u)) break;
+        struct timeval timestamp;
+        gettimeofday (&timestamp, 0);
+        houselog_sensor_numeric (&timestamp, name, "videos.free", avail, u);
+        houselog_sensor_flush ();
 
         for (i = 0; devices[i] > 0; ++i) {
             if (devices[i] == '+') {

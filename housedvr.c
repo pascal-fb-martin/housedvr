@@ -51,8 +51,9 @@
 #include "echttp_static.h"
 
 #include "houseportalclient.h"
-#include "houselog.h"
 #include "housediscover.h"
+#include "houselog.h"
+#include "houselog_sensor.h"
 
 #include "housedvr_feed.h"
 #include "housedvr_store.h"
@@ -96,9 +97,10 @@ static void dvr_background (int fd, int mode) {
     }
     housedvr_store_background(now);
     housedvr_feed_background(now);
+
     housediscover (now);
     houselog_background (now);
-    housediscover (now);
+    houselog_sensor_background (now);
 }
 
 static void dvr_protect (const char *method, const char *uri) {
@@ -129,6 +131,7 @@ int main (int argc, const char **argv) {
     }
     housediscover_initialize (argc, argv);
     houselog_initialize ("dvr", argc, argv);
+    houselog_sensor_initialize ("dvr", argc, argv);
 
     echttp_cors_allow_method("GET");
     echttp_protect (0, dvr_protect);
@@ -141,7 +144,6 @@ int main (int argc, const char **argv) {
 
     echttp_background (&dvr_background);
 
-    housediscover_initialize (argc, argv);
     houselog_event ("SERVICE", "dvr", "START", "ON %s", HostName);
     echttp_loop();
 }
