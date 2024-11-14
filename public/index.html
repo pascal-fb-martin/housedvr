@@ -73,10 +73,11 @@ function playVideo (link) {
     var player = document.getElementById("videoplayer");
     if (player) {
         player.innerHTML = '<video controls autoplay mute width="' + (window.innerWidth / 2) + '" height="auto"><source src="' + link + '" type="video/mp4"></video>';
-        container.style.display = 'block';
         container.style.width = window.innerWidth / 2;
-        container.style.height = auto;
+        container.style.height = 'auto';
         container.style.left = window.innerWidth / 4;
+        container.style.top = window.innerHeight / 4;
+        container.style.display = 'block';
     }
 }
 
