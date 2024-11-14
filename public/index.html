@@ -48,26 +48,6 @@ function getDayEvents (day, callback) {
    command.send(null);
 }
 
-function moveItemToCenter (item) {
-   var browserWidth = window.innerWidth;
-   var browserHeight = window.innerHeight;
-   var width = item.style.width;
-   var height = item.style.height;
-
-   item.style.position = fixed;
-   item.style.zindex = this.style.zindex + 1;
-
-   if (width >= browserWidth)
-      item.style.left = 0;
-   else
-      item.style.left = (browserWidth - width) / 2;
-
-   if (height >= browserHeight)
-      item.style.top = 0;
-   else
-      item.style.top = (browserHeight - height) / 2;
-}
-
 function playVideo (link) {
     var container = document.getElementById("videoframe");
     var player = document.getElementById("videoplayer");
@@ -159,9 +139,12 @@ function updateDayEvents () {
    // Manage the selection in the calendar.
    if (currentSelection) {
       currentSelection.innerHTML = ''+currentSelection.day;
+      currentSelection.className = '';
    }
    this.innerHTML = '<b>'+this.day+'</b>';
    currentSelection = this;
+
+   this.className = 'houseactive';
 
    getDayEvents (this.day, function (data) {
       currentDayEvents = data;
@@ -250,7 +233,6 @@ function drawCalendar (data) {
              if (data[i]) {
                button = document.createElement("button");
                button.innerHTML = ''+i;
-               button.className = 'calendarButton';
                button.onclick = updateDayEvents;
                button.day = ''+i;
                column.appendChild(button);
