@@ -13,7 +13,7 @@ files are eliminated.
 
 The video feeds are maint to be automatically detected through discovery of the `cctv` service. There will be one implementation of the `cctv` service for each motion detection software supported (future).
 
-This service also provides a compatibility API similar to the existing [MotionCenter](https://github.com/pascal-fb-martin/motionCenter) API. The existing motion-join script from that project can be used with only minor modifications:
+This service also provides a compatibility API similar to the old [MotionCenter](https://github.com/pascal-fb-martin/motionCenter) API. The existing motion-join script from that project can be used with only minor modifications:
 - add an `admin` HTTP parameter to provide the URL of the Motion web site.
 - change the web server port number to 80.
 - change the web server URI from /api/camera/declare to /dvr/source/declare.
