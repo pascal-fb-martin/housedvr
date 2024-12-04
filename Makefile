@@ -41,7 +41,14 @@ housedvr: $(OBJS)
 
 # Distribution agnostic file installation -----------------------
 
-install-app:
+install-ui:
+	mkdir -p $(SHARE)/public/dvr
+	chmod 755 $(SHARE) $(SHARE)/public $(SHARE)/public/dvr
+	cp public/* $(SHARE)/public/dvr
+	chown root:root $(SHARE)/public/dvr/*
+	chmod 644 $(SHARE)/public/dvr/*
+
+install-app: install-ui
 	mkdir -p $(HROOT)/bin
 	mkdir -p /var/lib/house
 	mkdir -p /etc/house
@@ -49,11 +56,6 @@ install-app:
 	cp housedvr $(HROOT)/bin
 	chown root:root $(HROOT)/bin/housedvr
 	chmod 755 $(HROOT)/bin/housedvr
-	mkdir -p $(SHARE)/public/dvr
-	chmod 755 $(SHARE) $(SHARE)/public $(SHARE)/public/dvr
-	cp public/* $(SHARE)/public/dvr
-	chown root:root $(SHARE)/public/dvr/*
-	chmod 644 $(SHARE)/public/dvr/*
 	touch /etc/default/housedvr
 
 uninstall-app:
