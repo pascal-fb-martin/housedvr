@@ -52,7 +52,7 @@ install-ui:
 install-app: install-ui
 	grep -q '^motion:' /etc/passwd || useradd -r motion -s /usr/sbin/nologin -d /var/lib/house
 	mkdir -p $(STORE)
-	chown -R house $(STORE)
+	chown -R motion $(STORE)
 	mkdir -p $(HROOT)/bin
 	mkdir -p /var/lib/house
 	mkdir -p /etc/house
