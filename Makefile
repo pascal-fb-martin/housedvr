@@ -20,6 +20,7 @@
 HAPP=housedvr
 HROOT=/usr/local
 SHARE=$(HROOT)/share/house
+STORE=/storage/motion/videos
 
 # Application build. --------------------------------------------
 
@@ -49,6 +50,8 @@ install-ui:
 	chmod 644 $(SHARE)/public/dvr/*
 
 install-app: install-ui
+	mkdir -p $(STORE)
+	chown -R house $(STORE)
 	mkdir -p $(HROOT)/bin
 	mkdir -p /var/lib/house
 	mkdir -p /etc/house
