@@ -50,6 +50,7 @@ install-ui:
 	chmod 644 $(SHARE)/public/dvr/*
 
 install-app: install-ui
+	grep -q '^motion:' /etc/passwd || useradd -r motion -s /usr/sbin/nologin -d /var/lib/house
 	mkdir -p $(STORE)
 	chown -R house $(STORE)
 	mkdir -p $(HROOT)/bin
