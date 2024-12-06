@@ -438,7 +438,7 @@ void housedvr_feed_background (time_t now) {
     }
     if (starting == 0) starting = now;
 
-    // Scan every 15s for the first 2 minutes, then slow down to every minute.
+    // Scan every 15s for the first 2 minutes, then scan every 2 minutes.
     // The fast start is to make the whole network recover fast from
     // an outage, when we do not know in which order the systems start.
     // Later on, there is no need to create more traffic.
@@ -446,7 +446,7 @@ void housedvr_feed_background (time_t now) {
     //
     if (now <= latestdiscovery + 15) return;
     housedvr_feed_prune (now);
-    if (now <= latestdiscovery + 1800 && now >= starting + 60) return;
+    if (now <= latestdiscovery + 120 && now >= starting + 120) return;
     latestdiscovery = now;
 
     DEBUG ("Proceeding with discovery of service %s\n", HouseFeedService);
