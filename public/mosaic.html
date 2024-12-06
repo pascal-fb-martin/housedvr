@@ -44,7 +44,7 @@ function drawCameras (data) {
 
    for (var i = 0; i < data.length; i++) {
       var link = document.createElement("a");
-      link.href = '/live.html?camera=' + data[i].name;
+      link.href = '/dvr/live.html?camera=' + data[i].name;
       var video = document.createElement("img");
       video.className = "video";
       video.src = data[i].url;
