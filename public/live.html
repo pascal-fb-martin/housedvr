@@ -47,7 +47,7 @@ function drawCamera (data) {
 
 function showCamera () {
    getCameras (function (data) {
-      var title = data.host+' - Live Video';
+      var title = window.location.hostname+' - Live Video';
       document.getElementsByTagName ('title')[0].innerHTML = title;
       drawCamera(data);
       currentCameras = data;
