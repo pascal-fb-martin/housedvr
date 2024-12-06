@@ -1,6 +1,6 @@
 <html>
 <head>
-<title>DVR Home</title>
+<title>DVR Status</title>
 <link rel=stylesheet type="text/css" href="/house.css" title="House">
 <script language="javascript" type="text/javascript">
 
@@ -123,6 +123,8 @@ function listStorage (data) {
 }
 
 function showAll (data) {
+   var title = data.host+' - DVR Status';
+   document.getElementsByTagName ('title')[0].innerHTML = title;
    listServers(data);
    listCameras(data);
    listStorage(data);
