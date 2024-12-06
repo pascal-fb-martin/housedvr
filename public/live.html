@@ -42,13 +42,11 @@ function drawCamera (data) {
       }
    }
    var title = document.getElementsByClassName ('title')[0];
-   title.innerHTML = camera + ' live';
+   title.innerHTML = camera + ' - Live Video';
 }
 
 function showCamera () {
    getCameras (function (data) {
-      var title = window.location.hostname+' - Live Video';
-      document.getElementsByTagName ('title')[0].innerHTML = title;
       drawCamera(data);
       currentCameras = data;
    });

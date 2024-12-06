@@ -58,6 +58,8 @@ function drawCameras (data) {
 
 function showCameras () {
    getCameras (function (data) {
+      var title = window.location.hostname+' - Live Video';
+      document.getElementsByTagName ('title')[0].innerHTML = title;
       drawCameras(data);
       currentCameras = data;
    });
