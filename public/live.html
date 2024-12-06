@@ -12,7 +12,6 @@ function getCameras (callback) {
    command.open("GET", "/dvr/status");
    command.onreadystatechange = function () {
       if (command.readyState === 4 && command.status === 200) {
-         var type = command.getResponseHeader("Content-Type");
          var data = JSON.parse(command.responseText);
          callback(data.dvr.feed);
       }
@@ -35,7 +34,7 @@ function drawCamera (data) {
       if (data[i].name == camera) {
          var video = document.createElement("img");
          video.className = "video";
-         video.src = 'http://' + data[i].url + '/';
+         video.src = data[i].url;
          video.width = window.innerWidth;
          video.border = 3;
          video.style.borderColor = 'white';
