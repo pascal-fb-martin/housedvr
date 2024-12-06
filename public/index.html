@@ -172,6 +172,9 @@ function resizeDayEvents () {
 
 function drawCalendar (data) {
 
+   var title = data.host+' - DVR Log';
+   document.getElementsByTagName ('title')[0].innerHTML = title;
+
    var table = document.getElementsByClassName ('monthly')[0];
 
    // Remove all current content.
