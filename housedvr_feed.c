@@ -142,8 +142,8 @@ static int housedvr_feed_register (const char *name, const char *url) {
     int new = -1;
 
     for (i = FeedsCount-1; i >= 0; --i) {
-        if (Feeds[i].url[0]) {
-            if (!strcmp (url, Feeds[i].url)) break;
+        if (Feeds[i].name[0]) {
+            if (!strcmp (name, Feeds[i].name)) break;
         } else {
             new = i;
         }
@@ -286,7 +286,7 @@ static void housedvr_feed_discovered
 
            DEBUG ("Feed %s discovered at %s\n",
                   inner->key, inner->value.string);
-           houselog_event ("FEED", inner->key,
+           houselog_event ("FEED", feed,
                            "ADDED", "URL %s", inner->value.string);
        }
    }
