@@ -47,7 +47,7 @@ function listServers (data) {
 
       column = document.createElement("td");
       var link = document.createElement("a");
-      link.href = 'http://' + server.url + '/';
+      link.href = server.url;
       link.innerHTML = link.href;
       column.appendChild(link);
       line.appendChild(column);
@@ -80,7 +80,7 @@ function listCameras (data) {
 
       column = document.createElement("td");
       var link = document.createElement("a");
-      link.href = 'http://' + feed.url + '/';
+      link.href = feed.url;
       link.innerHTML = link.href;
       column.appendChild(link);
       line.appendChild(column);

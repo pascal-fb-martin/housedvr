@@ -277,10 +277,12 @@ static void housedvr_feed_discovered
    }
 
    for (i = 0; i < n; ++i) {
+       char feed[128];
        ParserToken *inner = tokens + feeds + innerlist[i];
        if (inner->type != PARSER_STRING) continue;
 
-       if (housedvr_feed_register (inner->key, inner->value.string)) {
+       snprintf (feed, sizeof(feed), "%s:%s", hostname, inner->key);
+       if (housedvr_feed_register (feed, inner->value.string)) {
 
            DEBUG ("Feed %s discovered at %s\n",
                   inner->key, inner->value.string);
@@ -324,13 +326,14 @@ static const char *dvr_feed_declare (const char *method,
     if (name && url && space) {
         char device[128];
         char feed[128];
-        char camurl[128];
+        char devurl[128];
         int i;
         int j = 0;
 
-        if (housedvr_feed_server (name, admin, space))
-            houselog_event ("SERVER", name, "ADDED", "MOTION URL %s", admin);
-
+        snprintf (devurl, sizeof(devurl), "http://%s/", admin);
+        if (housedvr_feed_server (name, devurl, space)) {
+            houselog_event ("SERVER", name, "ADDED", "MOTION URL %s", devurl);
+        }
         int avail = atoi (space);
         const char *u;
         for (u = space; *u > 0; ++u) if (isalpha(*u)) break;
@@ -343,9 +346,9 @@ static const char *dvr_feed_declare (const char *method,
             if (devices[i] == '+') {
                 device[j] = 0;
                 snprintf (feed, sizeof(feed), "%s:%s", name, device);
-                snprintf (camurl, sizeof(camurl), "%s/%s/stream", url, device);
-                if (housedvr_feed_register (feed, camurl))
-                    houselog_event ("FEED", feed, "ADDED", "URL %s", camurl);
+                snprintf (devurl, sizeof(devurl), "http://%s/%s/stream", url, device);
+                if (housedvr_feed_register (feed, devurl))
+                    houselog_event ("FEED", feed, "ADDED", "URL %s", devurl);
                 j = 0; // Switch to the next device.
             } else {
                 device[j++] = devices[i];
@@ -354,9 +357,9 @@ static const char *dvr_feed_declare (const char *method,
         if (j > 0) {
             device[j] = 0;
             snprintf (feed, sizeof(feed), "%s:%s", name, device);
-            snprintf (camurl, sizeof(camurl), "%s/%s/stream", url, device);
-            if (housedvr_feed_register (feed, camurl))
-                houselog_event ("FEED", feed, "ADDED", "URL %s", camurl);
+            snprintf (devurl, sizeof(devurl), "http://%s/%s/stream", url, device);
+            if (housedvr_feed_register (feed, devurl))
+                houselog_event ("FEED", feed, "ADDED", "URL %s", devurl);
         }
     }
 
