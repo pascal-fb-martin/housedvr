@@ -57,6 +57,7 @@
  *
  */
 
+#include <limits.h>
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -77,7 +78,8 @@
 typedef struct {
     char   name[128];
     char   url[256];
-    char   space[16];
+    int    latest_available;
+    int    available[60];
     time_t timestamp;
 } ServerRegistration;
 
@@ -98,11 +100,23 @@ static int               FeedsSize = 0;
 static const char *HouseFeedService = "cctv"; // Default is security DVR.
 
 
+static void housedvr_feed_reset_metrics (int server) {
+    int i;
+    for (i = 59; i >= 0; --i) Servers[server].available[i] = -1; // No data.
+}
+
 static int housedvr_feed_server (const char *name,
                                  const char *url, const char *space) {
 
     int i;
     int new = -1;
+
+    int available = atoi (space);
+    const char *u;
+    for (u = space; *u > 0; ++u) if (isalpha(*u)) break;
+
+    if (*u == 'G') available *= 1024;  // Align on MB.
+    else if (*u != 'M') available = 0; // So little left, it does not matter.
 
     for (i = ServersCount-1; i >= 0; --i) {
         if (Servers[i].name[0]) {
@@ -125,14 +139,14 @@ static int housedvr_feed_server (const char *name,
         }
         snprintf (Servers[i].name, sizeof(Servers[i].name), "%s", name);
         new = 1;
+        housedvr_feed_reset_metrics (i);
     }
     if (strcmp (Servers[i].url, url)) {
         snprintf (Servers[i].url, sizeof(Servers[i].url), "%s", url);
     }
-    if (strcmp (Servers[i].space, space)) {
-        snprintf (Servers[i].space, sizeof(Servers[i].space), "%s", space);
-    }
     Servers[i].timestamp = time(0);
+    Servers[i].available[(Servers[i].timestamp / 60) % 60] = available;
+    Servers[i].latest_available = available;
     return new;
 }
 
@@ -334,13 +348,6 @@ static const char *dvr_feed_declare (const char *method,
         if (housedvr_feed_server (name, devurl, space)) {
             houselog_event ("SERVER", name, "ADDED", "MOTION URL %s", devurl);
         }
-        int avail = atoi (space);
-        const char *u;
-        for (u = space; *u > 0; ++u) if (isalpha(*u)) break;
-        struct timeval timestamp;
-        gettimeofday (&timestamp, 0);
-        houselog_sensor_numeric (&timestamp, name, "videos.free", avail, u);
-        houselog_sensor_flush ();
 
         for (i = 0; devices[i] > 0; ++i) {
             if (devices[i] == '+') {
@@ -381,9 +388,10 @@ int housedvr_feed_status (char *buffer, int size) {
 
         cursor += snprintf (buffer+cursor, size-cursor,
                             "%s{\"name\":\"%s\",\"url\":\"%s\""
-                                ",\"space\":\"%s\",\"timestamp\":%ld}",
+                                ",\"space\":\"%d MB\",\"timestamp\":%ld}",
                             prefix, Servers[i].name, Servers[i].url,
-                                Servers[i].space, (long)(Servers[i].timestamp));
+                            Servers[i].latest_available,
+                            (long)(Servers[i].timestamp));
         if (cursor >= size) goto overflow;
         prefix = ",";
     }
@@ -417,6 +425,35 @@ overflow:
     echttp_error (413, "Payload too large");
     buffer[0] = 0;
     return 0;
+}
+
+static void housedvr_feed_background_sensor (time_t now) {
+
+    if (now % 3600) return; // Hourly report.
+
+    int s;
+    int donesomething = 0;
+
+    for (s = 0; s < ServersCount; ++s) {
+        int i;
+        int available = INT_MAX;
+        for (i = 59; i >= 0; --i) {
+            if (available > Servers[s].available[i]) {
+                if (Servers[s].available[i] >= 0)
+                    available = Servers[s].available[i];
+            }
+        }
+        if (available < INT_MAX) {
+            struct timeval timestamp;
+            timestamp.tv_sec = now;
+            timestamp.tv_usec = 0;
+            houselog_sensor_numeric (&timestamp, Servers[s].name,
+                                     "videos.free", available, "MB");
+            housedvr_feed_reset_metrics (s);
+            donesomething = 1;
+        }
+    }
+    if (donesomething) houselog_sensor_flush ();
 }
 
 void housedvr_feed_initialize (int argc, const char **argv) {
@@ -454,5 +491,7 @@ void housedvr_feed_background (time_t now) {
 
     DEBUG ("Proceeding with discovery of service %s\n", HouseFeedService);
     housediscovered (HouseFeedService, 0, housedvr_feed_scan);
+
+    housedvr_feed_background_sensor (now);
 }
 
