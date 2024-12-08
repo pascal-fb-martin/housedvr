@@ -79,6 +79,7 @@ typedef struct {
     char   name[128];
     char   url[256];
     int    latest_available;
+    int    latest_index;
     int    available[60];
     time_t timestamp;
 } ServerRegistration;
@@ -103,6 +104,7 @@ static const char *HouseFeedService = "cctv"; // Default is security DVR.
 static void housedvr_feed_reset_metrics (int server) {
     int i;
     for (i = 59; i >= 0; --i) Servers[server].available[i] = -1; // No data.
+    Servers[server].latest_index = -1; // None.
 }
 
 static int housedvr_feed_server (const char *name,
@@ -145,7 +147,24 @@ static int housedvr_feed_server (const char *name,
         snprintf (Servers[i].url, sizeof(Servers[i].url), "%s", url);
     }
     Servers[i].timestamp = time(0);
-    Servers[i].available[(Servers[i].timestamp / 60) % 60] = available;
+
+    // We record the free space on a minute basis, but the actual sampling
+    // might be less frequent. This may cause a few slots to be skipped
+    // between two recorded values: these now obsolete values must be erased.
+    //
+    int index = (Servers[i].timestamp / 60) % 60;
+    if (Servers[i].latest_index >= 0) {
+        int j;
+        for (j = Servers[i].latest_index + 1; j != index; ++j) {
+            if (j >= 60) {
+                j = 0;
+                if (index == 0) break;
+            }
+            Servers[i].available[j] = -1;
+        }
+    }
+    Servers[i].latest_index = index;
+    Servers[i].available[index] = available;
     Servers[i].latest_available = available;
     return new;
 }
@@ -429,7 +448,10 @@ overflow:
 
 static void housedvr_feed_background_sensor (time_t now) {
 
-    if (now % 3600) return; // Hourly report.
+    static time_t LastHour = 0;
+
+    if ((now / 3600) == LastHour) return; // Hourly report.
+    LastHour = (now / 3600);
 
     int s;
     int donesomething = 0;
@@ -445,7 +467,7 @@ static void housedvr_feed_background_sensor (time_t now) {
         }
         if (available < INT_MAX) {
             struct timeval timestamp;
-            timestamp.tv_sec = now;
+            timestamp.tv_sec = now - (now % 60);
             timestamp.tv_usec = 0;
             houselog_sensor_numeric (&timestamp, Servers[s].name,
                                      "videos.free", available, "MB");
@@ -469,6 +491,7 @@ void housedvr_feed_initialize (int argc, const char **argv) {
 void housedvr_feed_background (time_t now) {
 
     static time_t starting = 0;
+    static time_t latestcleanup = 0;
     static time_t latestdiscovery = 0;
 
     if (!now) { // This is a manual reset (force a discovery refresh)
@@ -478,20 +501,22 @@ void housedvr_feed_background (time_t now) {
     }
     if (starting == 0) starting = now;
 
-    // Scan every 15s for the first 2 minutes, then scan every 2 minutes.
+    // Scan every 15s for the first 2 minutes, then scan every minute.
     // The fast start is to make the whole network recover fast from
     // an outage, when we do not know in which order the systems start.
     // Later on, there is no need to create more traffic.
     // The timing of the pruning mechanism is not impacted.
     //
-    if (now <= latestdiscovery + 15) return;
+    if (now <= latestcleanup + 15) return;
+    latestcleanup = now;
+
     housedvr_feed_prune (now);
-    if (now <= latestdiscovery + 120 && now >= starting + 120) return;
+    housedvr_feed_background_sensor (now);
+
+    if (now <= latestdiscovery + 60 && now >= starting + 120) return;
     latestdiscovery = now;
 
     DEBUG ("Proceeding with discovery of service %s\n", HouseFeedService);
     housediscovered (HouseFeedService, 0, housedvr_feed_scan);
-
-    housedvr_feed_background_sensor (now);
 }
 
