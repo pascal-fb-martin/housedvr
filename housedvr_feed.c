@@ -236,11 +236,13 @@ static void housedvr_feed_prune (time_t now) {
 static void housedvr_feed_discovered
                (void *origin, int status, char *data, int length) {
 
+   static ParserToken *Tokens = 0;
+   static int *InnerList = 0;
+   static int TokensSize = 0;
+
    const char *server = (const char *) origin;
-   ParserToken tokens[128];
-   int  innerlist[128];
    char path[256];
-   int  count = 128;
+   int  count;
    int  i;
    const char *space = "0";
 
@@ -257,7 +259,15 @@ static void housedvr_feed_discovered
 
    // Analyze the answer and retrieve the listed feeds.
    //
-   const char *error = echttp_json_parse (data, tokens, &count);
+   int estimated = echttp_json_estimate (data);
+   if (estimated >= TokensSize) {
+       TokensSize = estimated + 128;
+       Tokens = realloc (Tokens, TokensSize * sizeof(*Tokens));
+       InnerList = realloc (InnerList, TokensSize * sizeof(*InnerList));
+   }
+   count = TokensSize;
+
+   const char *error = echttp_json_parse (data, Tokens, &count);
    if (error) {
        houselog_trace
            (HOUSE_FAILURE, server, "JSON syntax error, %s", error);
@@ -268,42 +278,42 @@ static void housedvr_feed_discovered
        return;
    }
 
-   int host = echttp_json_search (tokens, ".host");
+   int host = echttp_json_search (Tokens, ".host");
    if (host <= 0) {
        houselog_trace (HOUSE_FAILURE, server, "no hostname");
        return;
    }
-   char *hostname = tokens[host].value.string;
+   char *hostname = Tokens[host].value.string;
 
-   int feeds = echttp_json_search (tokens, ".cctv.feeds");
+   int feeds = echttp_json_search (Tokens, ".cctv.feeds");
    if (feeds <= 0) {
        houselog_trace (HOUSE_FAILURE, server, "no feed data");
        return;
    }
 
-   int console = echttp_json_search (tokens, ".cctv.console");
+   int console = echttp_json_search (Tokens, ".cctv.console");
    if (console <= 0) {
        houselog_trace (HOUSE_FAILURE, server, "no console URL");
        return;
    }
-   const char *adminweb = tokens[console].value.string;
+   const char *adminweb = Tokens[console].value.string;
 
-   int available = echttp_json_search (tokens, ".cctv.available");
-   if (available >= 0 && tokens[feeds+available].type == PARSER_STRING) {
-       space = tokens[feeds+available].value.string;
+   int available = echttp_json_search (Tokens, ".cctv.available");
+   if (available >= 0 && Tokens[feeds+available].type == PARSER_STRING) {
+       space = Tokens[feeds+available].value.string;
    }
 
    if (housedvr_feed_server (hostname, adminweb, space)) {
        houselog_event ("SERVER", hostname, "ADDED", "MOTION URL %s", adminweb);
    }
 
-   int n = tokens[feeds].length;
+   int n = Tokens[feeds].length;
    if (n <= 0) {
        houselog_trace (HOUSE_FAILURE, server, "empty feed data");
        return;
    }
 
-   error = echttp_json_enumerate (tokens+feeds, innerlist);
+   error = echttp_json_enumerate (Tokens+feeds, InnerList);
    if (error) {
        houselog_trace (HOUSE_FAILURE, path, "%s", error);
        return;
@@ -311,7 +321,7 @@ static void housedvr_feed_discovered
 
    for (i = 0; i < n; ++i) {
        char feed[128];
-       ParserToken *inner = tokens + feeds + innerlist[i];
+       ParserToken *inner = Tokens + feeds + InnerList[i];
        if (inner->type != PARSER_STRING) continue;
 
        snprintf (feed, sizeof(feed), "%s:%s", hostname, inner->key);
@@ -359,7 +369,7 @@ static const char *dvr_feed_declare (const char *method,
     if (name && url && space) {
         char device[128];
         char feed[128];
-        char devurl[128];
+        char devurl[256];
         int i;
         int j = 0;
 
