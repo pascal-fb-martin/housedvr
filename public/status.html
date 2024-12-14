@@ -122,12 +122,35 @@ function listStorage (data) {
    }
 }
 
+function listQueue (data) {
+   var table = document.getElementsByClassName ('queue')[0];
+
+   for (var i = table.childNodes.length - 1; i > 1; i--) {
+       table.removeChild(table.childNodes[i]);
+   }
+   for (var i = 0; i < data.dvr.queue.length; i++) {
+      var line = document.createElement("tr");
+      var queue = data.dvr.queue[i];
+
+      var column = document.createElement("td");
+      column.innerHTML = queue.feed;
+      line.appendChild(column);
+
+      column = document.createElement("td");
+      column.innerHTML = queue.path;
+      line.appendChild(column);
+
+      table.appendChild(line);
+   }
+}
+
 function showAll (data) {
    var title = data.host+' - DVR Status';
    document.getElementsByTagName ('title')[0].innerHTML = title;
    listServers(data);
    listCameras(data);
    listStorage(data);
+   listQueue(data);
 }
 
 function refreshDvr () {
@@ -195,6 +218,17 @@ window.onload = function() {
          <th width="10%">SIZE</th>
          <th width="10%">USED</th>
          <th width="10%">AVAILABLE</th>
+      </tr>
+   </table>
+   </p>
+   <br>
+   <br>
+   <p>
+   <h1>Transfer Queue</h1>
+   <table class="housewidetable queue" border="0">
+      <tr>
+         <th width="30%">SOURCE</th>
+         <th width="70%">NAME</th>
       </tr>
    </table>
    </p>

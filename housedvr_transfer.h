@@ -18,11 +18,10 @@
  * Boston, MA  02110-1301, USA.
  *
  *
- * housedvr_store.h - Give access to the stored videos.
+ * housedvr_transfer.c - Transfer recordings from the feed.
  */
-
-void housedvr_store_initialize (int argc, const char **argv);
-const char *housedvr_store_root (void);
-void housedvr_store_background (time_t now);
-int  housedvr_store_status (char *buffer, int size);
+void housedvr_transfer_initialize (int argc, const char **argv);
+void housedvr_transfer_notify (const char *feed, const char *path);
+void housedvr_transfer_background (time_t now);
+int housedvr_transfer_status (char *buffer, int size);
 

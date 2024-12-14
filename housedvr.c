@@ -57,6 +57,7 @@
 
 #include "housedvr_feed.h"
 #include "housedvr_store.h"
+#include "housedvr_transfer.h"
 
 static int use_houseportal = 0;
 static char HostName[256];
@@ -75,6 +76,8 @@ static const char *dvr_status (const char *method, const char *uri,
     cursor += housedvr_feed_status (buffer+cursor, sizeof(buffer)-cursor);
     cursor += snprintf (buffer+cursor, sizeof(buffer)-cursor, ",");
     cursor += housedvr_store_status (buffer+cursor, sizeof(buffer)-cursor);
+    cursor += snprintf (buffer+cursor, sizeof(buffer)-cursor, ",");
+    cursor += housedvr_transfer_status (buffer+cursor, sizeof(buffer)-cursor);
     cursor += snprintf (buffer+cursor, sizeof(buffer)-cursor, "}}");
     echttp_content_type_json ();
     return buffer;
@@ -97,6 +100,7 @@ static void dvr_background (int fd, int mode) {
     }
     housedvr_store_background(now);
     housedvr_feed_background(now);
+    housedvr_transfer_background(now);
 
     housediscover (now);
     houselog_background (now);
@@ -138,6 +142,7 @@ int main (int argc, const char **argv) {
 
     housedvr_feed_initialize (argc, argv);
     housedvr_store_initialize (argc, argv);
+    housedvr_transfer_initialize (argc, argv);
 
     echttp_route_uri ("/dvr/status", dvr_status);
     echttp_static_route ("/", "/usr/local/share/house/public");

@@ -38,6 +38,11 @@
  *
  *    Initialize this module.
  *
+ * const char *housedvr_store_root (void);
+ *
+ *    Return the path to the recordings root directory. This is used to
+ *    share the same default and selected value with the transfer module.
+ *
  * void housedvr_store_background (time_t now);
  *
  *    The periodic function that manages the video storage.
@@ -75,6 +80,10 @@ static int HouseDvrMaxSpace = 0; // Default is no automatic cleanup.
 static const char *HouseDvrStorage = "/storage/motion/videos";
 static const char *HouseDvrUri =     "/dvr/storage/videos";
 
+
+const char *housedvr_store_root (void) {
+    return HouseDvrStorage;
+}
 
 static const char *dvr_store_top (const char *method, const char *uri,
                                         const char *data, int length) {

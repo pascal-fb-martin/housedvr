@@ -24,7 +24,7 @@ STORE=/storage/motion/videos
 
 # Application build. --------------------------------------------
 
-OBJS= housedvr_store.o housedvr_feed.o housedvr.o
+OBJS= housedvr_transfer.o housedvr_store.o housedvr_feed.o housedvr.o
 LIBOJS=
 
 all: housedvr
