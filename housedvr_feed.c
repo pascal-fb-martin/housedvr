@@ -408,20 +408,21 @@ static void housedvr_feed_scanned
        char jsonpath[64];
        snprintf (jsonpath, sizeof(jsonpath), "[%d]", n);
        int file = echttp_json_search (Tokens+records, jsonpath);
-       if (Tokens[records+file].length < 2) continue;
-       int filepath = echttp_json_search (Tokens+records+file, "[1]");
+       if (file <= 0) continue;
+       if (Tokens[records+file].type != PARSER_ARRAY) continue;
+       if (Tokens[records+file].length < 3) continue;
+
+       ParserToken *fileinfo = Tokens + records + file;
+       int filepath = echttp_json_search (fileinfo, "[1]");
        if (filepath <= 0) continue;
-       int timestamp = echttp_json_search (Tokens+records+file, "[0]");
-       if (timestamp <= 0) continue;
+       if (fileinfo[filepath].type != PARSER_STRING) continue;
+       int size = echttp_json_search (fileinfo, "[2]");
+       if (size <= 0) continue;
+       if (fileinfo[size].type != PARSER_INTEGER) continue;
 
-       // Ignore files that are too recent. (IS THIS MOTION SPECIFIC?)
-       if (Tokens[records+file+timestamp].value.integer > now - 30) {
-           HouseFeedNextScan = now + 30; // Force a scan soon to get that file.
-           continue;
-       }
-
-       housedvr_transfer_notify
-           (origin, Tokens[records+file+filepath].value.string);
+       housedvr_transfer_notify (origin,
+                                 fileinfo[filepath].value.string,
+                                 (int)(fileinfo[size].value.integer));
    }
 }
 

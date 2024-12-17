@@ -31,7 +31,7 @@
  *
  *    Initialize this module.
  *
- * void housedvr_transfer_notify (const char *feed, const char *path);
+ * void housedvr_transfer_notify (const char *feed, const char *path, int size);
  *
  *    Tell this module that a specified file is available on the specified
  *    feed. The feed name is actually an URL to use as a base for the transfer.
@@ -88,6 +88,8 @@ struct TransferFile;
 
 struct TransferFile {
     int state;
+    int size;
+    int offset;
     time_t timestamp;
     char *feed;
     char *path;
@@ -104,28 +106,64 @@ void housedvr_transfer_initialize (int argc, const char **argv) {
     //TBD
 }
 
-void housedvr_transfer_notify (const char *feed, const char *path) {
+void housedvr_transfer_notify (const char *feed, const char *path, int size) {
 
     int i;
-    struct TransferFile *cursor;
+    int cached = 0;
+    int offset = 0;
+    struct TransferFile *cursor = 0;
 
     // Was the file already transfered?
     for (cursor = TransferComplete; cursor; cursor = cursor->next) {
-        if (!strcmp (cursor->path, path)) return; // Already done.
+        if (!strcmp (cursor->path, path)) {
+            if (cursor->size == size) return; // Already transferred.
+            if (cursor->size < size) {
+                offset = cursor->size; // Transfer the additional data.
+            }
+            cached = 1;
+            break;
+        }
     }
 
     // Is the file queued for transfer?
     for (cursor = TransferQueue; cursor; cursor = cursor->next) {
-        if (!strcmp (cursor->path, path)) return; // Already queued.
+        if (!strcmp (cursor->path, path)) {
+            if (cursor->size == size) return; // Already queued.
+            if (cursor->state == TRANSFER_STATE_IDLE) {
+                cursor->size = size; // Update before the transfer starts.
+                return;
+            }
+            if (cursor->size < size) {
+                offset = cursor->size; // Requeue to get the additional data.
+            } else {
+                // The file was overwritten: retransfer.
+                // Should never happen with camera recordings, BTW.
+                offset = 0;
+            }
+            cached = 1;
+            break;
+        }
     }
 
-    // We did not find this file in our recently transfers, so
-    // the next (more expensive) check is the local file system.
-    //
-    char fullpath[512];
-    struct stat filestat;
-    snprintf (fullpath, sizeof(fullpath), "%s/%s", housedvr_store_root(), path);
-    if (stat (fullpath, &filestat) == 0) return; // File exists.
+    if (! cached) {
+        // We did not find this file in our recent transfers, so
+        // the next (more expensive) check is the local file system.
+        //
+        char fullpath[512];
+        struct stat filestat;
+        snprintf (fullpath, sizeof(fullpath),
+                  "%s/%s", housedvr_store_root(), path);
+        if (stat (fullpath, &filestat) == 0) { // File exists.
+            if (filestat.st_size == size) return; // .. and is whole.
+            if (size > filestat.st_size) {
+                offset = filestat.st_size;
+            } else {
+                // The file was overwritten: retransfer.
+                // Should never happen with camera recordings, BTW.
+                offset = 0;
+            }
+        }
+    }
 
     // The file must be new. Add it to the transfer queue.
     //
@@ -133,6 +171,8 @@ void housedvr_transfer_notify (const char *feed, const char *path) {
     cursor->timestamp = time(0);
     cursor->feed = strdup (feed);
     cursor->path = strdup (path);
+    cursor->size = size;
+    cursor->offset = offset;
 
     cursor->state = TRANSFER_STATE_IDLE;
     cursor->next = 0;
@@ -163,27 +203,46 @@ static void housedvr_transfer_cleanup (time_t now) {
 
 static void housedvr_transfer_end (time_t now, int status);
 
+static int housedvr_transfer_open (struct TransferFile *item, int status) {
+
+    char fullpath[512];
+    snprintf (fullpath, sizeof(fullpath),
+              "%s/%s", housedvr_store_root(), item->path);
+
+    if (status == 206) {
+        // Partial transfer, append to the existing file.
+        int fd = open (fullpath, O_WRONLY);
+        lseek (fd, item->offset, SEEK_SET);
+        return fd;
+    } else if (status == 200) {
+        // Full transfer: rewrite from scratch.
+        return open (fullpath, O_CREAT|O_WRONLY|O_TRUNC, 0777);
+    }
+    return -1;
+}
+
 static void housedvr_transfer_ready
                (void *origin, int status, char *data, int length) {
 
-    if (status != 200) return; // Let the response continue synchronously.
+    if ((status / 100) != 2) return; // Let the response continue synchronously.
+
+    const char *ascii = echttp_attribute_get ("Content-Length");
+    if (!ascii) return; // Should never happen.
+    int total = atoi(ascii);
 
     if (origin != TransferQueue) return; // Should never happen.
 
     struct TransferFile *item = TransferQueue;
     if ((!item) || (item->state != TRANSFER_STATE_GOING)) return;
 
-    // Create the new file and write the portion of data already received.
-    char fullpath[512];
-    snprintf (fullpath, sizeof(fullpath),
-              "%s/%s", housedvr_store_root(), item->path);
-    int fd = open (fullpath, O_CREAT+O_WRONLY, 0777);
-    if (length > 0)
+    // Create the new file and write the already received data, if any.
+    int fd = housedvr_transfer_open (item, status);
+    if (fd < 0) return; // Should never happen,
+    if (length > 0) {
         write (fd, data, length);
+    }
 
     // Tell echttp to write the remaining portion of the data, if any.
-    const char *ascii = echttp_attribute_get ("Content-Length");
-    int total = atoi(ascii);
     if (total > length) {
         echttp_transfer (fd, total-length);
     } else {
@@ -201,18 +260,18 @@ static void housedvr_transfer_complete
         return;
     }
 
-    if ((status == 200) && (length > 0)) {
-        if (origin != TransferQueue) return; // Should never happen.
-        struct TransferFile *item = TransferQueue;
-        if ((!item) || (item->state != TRANSFER_STATE_GOING)) return;
+    if (origin != TransferQueue) return; // Should never happen.
+    struct TransferFile *item = TransferQueue;
+    if ((!item) || (item->state != TRANSFER_STATE_GOING)) return;
 
-        char fullpath[512];
-        snprintf (fullpath, sizeof(fullpath),
-                  "%s/%s", housedvr_store_root(), item->path);
-        int fd = open (fullpath, O_CREAT+O_WRONLY);
-        write (fd, data, length);
-        close (fd);
+    if ((status / 100) == 2) {
+        if (length > 0) {
+            int fd = housedvr_transfer_open (item, status);
+            write (fd, data, length);
+            close (fd);
+        }
     }
+
     housedvr_transfer_end (time(0), status);
 }
 
@@ -228,6 +287,11 @@ static void housedvr_transfer_start (time_t now) {
         houselog_trace (HOUSE_FAILURE, url, "%s", error);
         housedvr_transfer_end (now, 500);
         return;
+    }
+    if (item->offset > 0) {
+        char rangespec[32];
+        snprintf (rangespec, sizeof(rangespec), "bytes=%d-", item->offset);
+        echttp_attribute_set ("Range", rangespec);
     }
     echttp_asynchronous (housedvr_transfer_ready);
     echttp_submit (0, 0, housedvr_transfer_complete, (void *)item);

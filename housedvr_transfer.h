@@ -21,7 +21,7 @@
  * housedvr_transfer.c - Transfer recordings from the feed.
  */
 void housedvr_transfer_initialize (int argc, const char **argv);
-void housedvr_transfer_notify (const char *feed, const char *path);
+void housedvr_transfer_notify (const char *feed, const char *path, int size);
 void housedvr_transfer_background (time_t now);
 int housedvr_transfer_status (char *buffer, int size);
 
