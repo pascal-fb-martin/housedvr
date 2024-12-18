@@ -109,18 +109,39 @@ void housedvr_transfer_initialize (int argc, const char **argv) {
 void housedvr_transfer_notify (const char *feed, const char *path, int size) {
 
     int i;
+    time_t now = time(0);
     int cached = 0;
     int offset = 0;
+    char fullpath[512];
     struct TransferFile *cursor = 0;
 
-    // Was the file already transfered?
+    // We need to make sure that the directory tree does exist.
+    //
+    if (strstr (path, "..")) return; // Security check: no arbitrary access.
+    int fpi = snprintf (fullpath, sizeof(fullpath),
+                            "%s/", housedvr_store_root());
+    if (fpi >= sizeof(fullpath)) return;
+    for (i = 0; path[i] > 0; ++i) {
+        if (path[i] == '/') {
+            fullpath[fpi] = 0;
+            mkdir (fullpath, 0755);
+        }
+        fullpath[fpi++] = path[i];
+        if (fpi >= sizeof(fullpath)) return;
+    }
+    fullpath[fpi] = 0;
+
+    // Was the file already transfered recently?
+    //
     for (cursor = TransferComplete; cursor; cursor = cursor->next) {
         if (!strcmp (cursor->path, path)) {
+            cursor->timestamp = now; // Avoid cleaning it up for now.
+            cached = 1;
+            if (cursor->state == TRANSFER_STATE_FAILED) break; // Redo it.
             if (cursor->size == size) return; // Already transferred.
             if (cursor->size < size) {
                 offset = cursor->size; // Transfer the additional data.
             }
-            cached = 1;
             break;
         }
     }
@@ -146,13 +167,10 @@ void housedvr_transfer_notify (const char *feed, const char *path, int size) {
     }
 
     if (! cached) {
-        // We did not find this file in our recent transfers, so
-        // the next (more expensive) check is the local file system.
+        // We did not find this file in our recent transfers, so the
+        // next (more expensive) step is to check the local file system.
         //
-        char fullpath[512];
         struct stat filestat;
-        snprintf (fullpath, sizeof(fullpath),
-                  "%s/%s", housedvr_store_root(), path);
         if (stat (fullpath, &filestat) == 0) { // File exists.
             if (filestat.st_size == size) return; // .. and is whole.
             if (size > filestat.st_size) {
@@ -186,6 +204,12 @@ void housedvr_transfer_notify (const char *feed, const char *path, int size) {
     TransferQueueLast = cursor;
 }
 
+static void housedvr_transfer_free (struct TransferFile *item) {
+    if (item->feed) free (item->feed);
+    if (item->path) free (item->path);
+    free (item);
+}
+
 static void housedvr_transfer_cleanup (time_t now) {
 
     struct TransferFile *cursor;
@@ -195,9 +219,7 @@ static void housedvr_transfer_cleanup (time_t now) {
         TransferComplete = cursor->next;
         if (!TransferComplete) TransferCompleteLast = 0;
 
-        if (cursor->feed) free (cursor->feed);
-        if (cursor->path) free (cursor->path);
-        free (cursor);
+        housedvr_transfer_free (cursor);
     }
 }
 
@@ -303,7 +325,7 @@ static void housedvr_transfer_end (time_t now, int status) {
     if (! item) return; // Self protection.
     if (item->state != TRANSFER_STATE_GOING) return; // Self protection.
 
-    if (status == 200) {
+    if (status / 100 == 2) {
         item->state = TRANSFER_STATE_DONE;
         houselog_event ("TRANSFER", "dvr", "COMPLETE",
                         "FOR FILE %s at %s", item->path, item->feed);
@@ -314,11 +336,12 @@ static void housedvr_transfer_end (time_t now, int status) {
                         status, item->path, item->feed);
     }
 
-    // Remove from the queue.
+    // Remove from the transfer schedule queue.
     TransferQueue = TransferQueue->next;
     if (! TransferQueue) TransferQueueLast = 0;
 
-    // Add to the transfer completed list (even if failed. Better later?).
+    // Add to the transfer completed list (even if failed: cache the status).
+    //
     if (TransferCompleteLast)
         TransferCompleteLast->next = item;
     else
