@@ -111,7 +111,6 @@ void housedvr_transfer_notify (const char *feed, const char *path, int size) {
     int i;
     time_t now = time(0);
     int cached = 0;
-    int offset = 0;
     char fullpath[512];
     struct TransferFile *cursor = 0;
 
@@ -139,9 +138,6 @@ void housedvr_transfer_notify (const char *feed, const char *path, int size) {
             cached = 1;
             if (cursor->state == TRANSFER_STATE_FAILED) break; // Redo it.
             if (cursor->size == size) return; // Already transferred.
-            if (cursor->size < size) {
-                offset = cursor->size; // Transfer the additional data.
-            }
             break;
         }
     }
@@ -153,13 +149,6 @@ void housedvr_transfer_notify (const char *feed, const char *path, int size) {
             if (cursor->state == TRANSFER_STATE_IDLE) {
                 cursor->size = size; // Update before the transfer starts.
                 return;
-            }
-            if (cursor->size < size) {
-                offset = cursor->size; // Requeue to get the additional data.
-            } else {
-                // The file was overwritten: retransfer.
-                // Should never happen with camera recordings, BTW.
-                offset = 0;
             }
             cached = 1;
             break;
@@ -173,24 +162,17 @@ void housedvr_transfer_notify (const char *feed, const char *path, int size) {
         struct stat filestat;
         if (stat (fullpath, &filestat) == 0) { // File exists.
             if (filestat.st_size == size) return; // .. and is whole.
-            if (size > filestat.st_size) {
-                offset = filestat.st_size;
-            } else {
-                // The file was overwritten: retransfer.
-                // Should never happen with camera recordings, BTW.
-                offset = 0;
-            }
         }
     }
 
-    // The file must be new. Add it to the transfer queue.
+    // The file must be new or has changed. Add it to the transfer queue.
     //
     cursor = malloc (sizeof(struct TransferFile));
     cursor->timestamp = time(0);
     cursor->feed = strdup (feed);
     cursor->path = strdup (path);
     cursor->size = size;
-    cursor->offset = offset;
+    cursor->offset = 0;
 
     cursor->state = TRANSFER_STATE_IDLE;
     cursor->next = 0;

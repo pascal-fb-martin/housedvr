@@ -420,9 +420,23 @@ static void housedvr_feed_scanned
        if (size <= 0) continue;
        if (fileinfo[size].type != PARSER_INTEGER) continue;
 
-       housedvr_transfer_notify (origin,
-                                 fileinfo[filepath].value.string,
-                                 (int)(fileinfo[size].value.integer));
+       int stable = 0;
+       if (fileinfo->length >= 4) {
+           int stableitem = echttp_json_search (fileinfo, "[3]");
+           if ((stableitem > 0) && (fileinfo[stableitem].type == PARSER_BOOL))
+               stable = fileinfo[stableitem].value.bool;
+       } else {
+           int timeitem = echttp_json_search (fileinfo, "[0]");
+           if ((timeitem > 0) && (fileinfo[timeitem].type == PARSER_INTEGER)) {
+               time_t ts = (time_t)(fileinfo[timeitem].value.integer);
+               if (ts < now - 60) stable = 1;
+           }
+       }
+       if (stable) {
+           housedvr_transfer_notify (origin,
+                                     fileinfo[filepath].value.string,
+                                     (int)(fileinfo[size].value.integer));
+       }
    }
 }
 
