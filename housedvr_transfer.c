@@ -340,13 +340,30 @@ static void housedvr_transfer_end (time_t now, int status) {
     TransferQueue = TransferQueue->next;
     if (! TransferQueue) TransferQueueLast = 0;
 
-    // Add to the transfer completed list (even if failed: cache the status).
+    // If the file is present in the transfer completed list already,
+    // then just update that entry instead of duplicating it.
+    // (The file may have been transferred twice if the file size changed.)
+    //
+    struct TransferFile *cursor;
+    for (cursor = TransferComplete; cursor; cursor = cursor->next) {
+        if (!strcmp (cursor->path, item->path)) {
+            cursor->timestamp = now;
+            cursor->state = item->state;
+            cursor->size = item->size;
+            housedvr_transfer_free (item);
+            return;
+        }
+    }
+
+    // Otherwise, add this item to the transfer completed list (even
+    // if this transfer failed: keep the status to force a retry later).
     //
     if (TransferCompleteLast)
         TransferCompleteLast->next = item;
     else
         TransferComplete = item;
     TransferCompleteLast = item;
+    item->timestamp = now;
 
     if (TransferQueue) housedvr_transfer_start (now);
 }
