@@ -409,10 +409,10 @@ static void housedvr_feed_scanned
        snprintf (jsonpath, sizeof(jsonpath), "[%d]", n);
        int file = echttp_json_search (Tokens+records, jsonpath);
        if (file <= 0) continue;
-       if (Tokens[records+file].type != PARSER_ARRAY) continue;
-       if (Tokens[records+file].length < 3) continue;
-
        ParserToken *fileinfo = Tokens + records + file;
+       if (fileinfo->type != PARSER_ARRAY) continue;
+       if (fileinfo->length < 3) continue;
+
        int filepath = echttp_json_search (fileinfo, "[1]");
        if (filepath <= 0) continue;
        if (fileinfo[filepath].type != PARSER_STRING) continue;
