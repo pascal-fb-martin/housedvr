@@ -12,6 +12,8 @@ var currentDate = new Date();
 var currentSelection = null;
 var currentDayEvents = null;
 
+var cameraSelector = new Array();
+
 function previousMonth () {
    var month = currentDate.getMonth();
    if (month == 0) {
@@ -115,8 +117,21 @@ function drawDayEvents (data) {
       return a.time.localeCompare(b.time);
    });
 
+   // If none of the cameras are checked, don't filter.
+   var usefilter = false;
+   for (const cam in cameraSelector) {
+       if (cameraSelector[cam].checked) {
+           usefilter = true;
+           break;
+       }
+   }
+
    var column = 0;
    for (var i = 0; i < data.length; i++) {
+      if (usefilter) {
+          if (cameraSelector[data[i].src])
+              if (! cameraSelector[data[i].src].checked) continue;
+      }
       column ++;
       if (column > imageColumns) {
          table.appendChild(row);
@@ -265,6 +280,45 @@ function drawCalendar (data) {
       table.appendChild(line);
 }
 
+function showCameras (data) {
+    var table = document.getElementsByClassName ('cameraselector')[0];
+
+    var columns = data.dvr.feed.length / 6; // 6 lines.
+    if (data.dvr.feed.length < 12)
+        columns = data.dvr.feed.length / 4; // Better looking with few cameras.
+    column = Math.ceil(columns);
+    var line = document.createElement("tr");
+    var column = document.createElement("th");
+    column.colspan = columns;
+    column.innerHTML = 'CAMERAS';
+    line.appendChild(column);
+    table.appendChild(line);
+    line = null;
+    for (var i = 0; i < data.dvr.feed.length; i++) {
+        if ((i % columns) == 0) {
+            if (line) table.appendChild(line);
+            line = null;
+        }
+        var feed = data.dvr.feed[i];
+        column = document.createElement("td");
+        column.style = 'float: left';
+        var content = document.createElement("input");
+        content.type = 'checkbox';
+        content.innerHTML = feed.name;
+        content.id = feed.name;
+        content.onclick = resizeDayEvents;
+        column.appendChild(content);
+        cameraSelector[feed.name] = content;
+        content = document.createElement("label");
+        content.textContent = feed.name;
+        content.htmlFor = feed.name;
+        column.appendChild(content);
+        if (!line) line = document.createElement("tr");
+        line.appendChild(column);
+    }
+    if (line) table.appendChild(line);
+}
+
 function updateCalendar () {
 
    var year = currentDate.getYear() + 1900;
@@ -280,7 +334,23 @@ function updateCalendar () {
    command.send(null);
 }
 
-window.onload = updateCalendar;
+function getCameras () {
+   var command = new XMLHttpRequest();
+   command.open("GET", "/dvr/status");
+   command.onreadystatechange = function () {
+      if (command.readyState === 4 && command.status === 200) {
+         showCameras (JSON.parse(command.responseText));
+       }
+   }
+   command.send(null);
+}
+
+function populate () {
+   updateCalendar();
+   getCameras();
+}
+
+window.onload = populate;
 window.onresize = resizeDayEvents;
 </script>
 </head>
@@ -298,16 +368,35 @@ window.onresize = resizeDayEvents;
    </td></tr>
    </table>
    <center>
-      <table class="monthlyBorder">
-      <tr><td>
-         <table class="monthly">
-         </table>
-      </td></tr>
+      <table>
+         <tr>
+            <td>
+               <table class="monthlyBorder">
+               <tr><td>
+               <table class="monthly">
+               </table>
+               </td></tr>
+               </table>
+            </td>
+            <td width="20%">
+            </td>
+            <td>
+               <table class="cameraselector">
+               </table>
+            </td>
+         </tr>
       </table>
    </center>
+   <br>
    <div class="events">
    </div>
-<div id="videoframe" style="display: none; z-index: 1000; position: fixed; top: 300px; left: 100px; border-radius: 11px; border: 3px solid #2f2f2f; background-color: #FFFFFF; opacity: 1"><center><button class="plugButton plugButtonEnabled" onclick="stopVideo()">Close</button><br><div id="videoplayer"></div></center></div>
+   <div id="videoframe" style="display: none; z-index: 1000; position: fixed; top: 300px; left: 100px; border-radius: 11px; border: 3px solid #2f2f2f; background-color: #FFFFFF; opacity: 1">
+      <center>
+         <button class="plugButton plugButtonEnabled" onclick="stopVideo()">Close</button>
+         <br>
+         <div id="videoplayer"></div>
+      </center>
+   </div>
 </body>
 </html>
 
