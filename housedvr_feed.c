@@ -75,7 +75,6 @@
 
 #include "housediscover.h"
 #include "houselog.h"
-#include "houselog_sensor.h"
 
 #include "housedvr_feed.h"
 #include "housedvr_transfer.h"
@@ -86,9 +85,7 @@ typedef struct {
     char   name[128];
     long long updated;
     char   adminurl[256];
-    int    latest_available;
-    int    latest_index;
-    int    available[60];
+    int    available;
     time_t timestamp;
 } ServerRegistration;
 
@@ -112,12 +109,6 @@ static const char *HouseFeedService = "cctv"; // Default is security DVR.
 static time_t HouseFeedNextScan = 0;
 static int    HouseFeedPolled = 0;
 static int    HouseFeedCheckPeriod = 30;
-
-static void housedvr_feed_reset_metrics (int server) {
-    int i;
-    for (i = 59; i >= 0; --i) Servers[server].available[i] = -1; // No data.
-    Servers[server].latest_index = -1; // None.
-}
 
 static int housedvr_feed_uptodate (const char *name, long long updated) {
 
@@ -166,7 +157,6 @@ static int housedvr_feed_server (const char *name, long long updated,
         }
         snprintf (Servers[i].name, sizeof(Servers[i].name), "%s", name);
         new = 1;
-        housedvr_feed_reset_metrics (i);
     }
     if (strcmp (Servers[i].adminurl, adminurl)) {
         snprintf (Servers[i].adminurl, sizeof(Servers[i].adminurl), "%s", adminurl);
@@ -177,24 +167,7 @@ static int housedvr_feed_server (const char *name, long long updated,
     // the updated value if 0 (i.e. information not available).
     if (updated) Servers[i].updated = updated;
 
-    // We record the free space on a minute basis, but the actual sampling
-    // might be less frequent. This may cause a few slots to be skipped
-    // between two recorded values: these now obsolete values must be erased.
-    //
-    int index = (Servers[i].timestamp / 60) % 60;
-    if (Servers[i].latest_index >= 0) {
-        int j;
-        for (j = Servers[i].latest_index + 1; j != index; ++j) {
-            if (j >= 60) {
-                j = 0;
-                if (index == 0) break;
-            }
-            Servers[i].available[j] = -1;
-        }
-    }
-    Servers[i].latest_index = index;
-    Servers[i].available[index] = available;
-    Servers[i].latest_available = available;
+    Servers[i].available = available;
     return new;
 }
 
@@ -609,7 +582,7 @@ int housedvr_feed_status (char *buffer, int size) {
                             "%s{\"name\":\"%s\",\"url\":\"%s\""
                                 ",\"space\":\"%d MB\",\"timestamp\":%ld}",
                             prefix, Servers[i].name, Servers[i].adminurl,
-                            Servers[i].latest_available,
+                            Servers[i].available,
                             (long)(Servers[i].timestamp));
         if (cursor >= size) goto overflow;
         prefix = ",";
@@ -645,38 +618,6 @@ overflow:
     echttp_error (413, "Payload too large");
     buffer[0] = 0;
     return 0;
-}
-
-static void housedvr_feed_background_sensor (time_t now) {
-
-    static time_t LastHour = 0;
-
-    if ((now / 3600) == LastHour) return; // Hourly report.
-    LastHour = (now / 3600);
-
-    int s;
-    int donesomething = 0;
-
-    for (s = 0; s < ServersCount; ++s) {
-        int i;
-        int available = INT_MAX;
-        for (i = 59; i >= 0; --i) {
-            if (available > Servers[s].available[i]) {
-                if (Servers[s].available[i] >= 0)
-                    available = Servers[s].available[i];
-            }
-        }
-        if (available < INT_MAX) {
-            struct timeval timestamp;
-            timestamp.tv_sec = now - (now % 60);
-            timestamp.tv_usec = 0;
-            houselog_sensor_numeric (&timestamp, Servers[s].name,
-                                     "videos.free", available, "MB");
-            housedvr_feed_reset_metrics (s);
-            donesomething = 1;
-        }
-    }
-    if (donesomething) houselog_sensor_flush ();
 }
 
 void housedvr_feed_initialize (int argc, const char **argv) {
@@ -717,7 +658,6 @@ void housedvr_feed_background (time_t now) {
     NextCleanup = now + 10;
 
     housedvr_feed_prune (now);
-    housedvr_feed_background_sensor (now);
 
     if (now < HouseFeedNextScan) {
         if (now <= NextDiscovery && now >= StartPeriodEnd) return;
