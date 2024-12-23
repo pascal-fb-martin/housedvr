@@ -111,6 +111,7 @@ static const char *HouseFeedService = "cctv"; // Default is security DVR.
 
 static time_t HouseFeedNextScan = 0;
 static int    HouseFeedPolled = 0;
+static int    HouseFeedCheckPeriod = 30;
 
 static void housedvr_feed_reset_metrics (int server) {
     int i;
@@ -681,42 +682,47 @@ static void housedvr_feed_background_sensor (time_t now) {
 void housedvr_feed_initialize (int argc, const char **argv) {
 
     int i;
+    const char *period = 0;
     for (i = 1; i < argc; ++i) {
         echttp_option_match ("-dvr-feed=", argv[i], &HouseFeedService);
+        echttp_option_match ("-dvr-check=", argv[i], &period);
     }
+    if (period)
+        HouseFeedCheckPeriod = atoi(period);
+
     // Support the legacy mode (each server declares its video feeds):
     echttp_route_uri ("/dvr/source/declare", dvr_feed_declare);
 }
 
 void housedvr_feed_background (time_t now) {
 
-    static time_t starting = 0;
-    static time_t latestcleanup = 0;
-    static time_t latestdiscovery = 0;
+    static time_t StartPeriodEnd = 0;
+    static time_t NextCleanup = 0;
+    static time_t NextDiscovery = 0;
 
     if (!now) { // This is a manual reset (force a discovery refresh)
-        starting = 0;
-        latestdiscovery = 0;
+        StartPeriodEnd = 0;
+        NextDiscovery = 0;
         return;
     }
-    if (starting == 0) starting = now;
 
-    // Poll every 15s for the first 2 minutes, then poll every minute.
+    // Poll every 10s for the first minute, then poll every 30 seconds.
     // The fast start is to make the whole network recover fast from
     // an outage, when we do not know in which order the systems start.
     // Later on, there is no need to create more traffic.
     // The timing of the pruning mechanism is not impacted.
     //
-    if (now <= latestcleanup + 15) return;
-    latestcleanup = now;
+    if (StartPeriodEnd == 0) StartPeriodEnd = now + 60;
+    if (now <= NextCleanup) return;
+    NextCleanup = now + 10;
 
     housedvr_feed_prune (now);
     housedvr_feed_background_sensor (now);
 
     if (now < HouseFeedNextScan) {
-        if (now <= latestdiscovery + 60 && now >= starting + 120) return;
+        if (now <= NextDiscovery && now >= StartPeriodEnd) return;
     }
-    latestdiscovery = now;
+    NextDiscovery = now + HouseFeedCheckPeriod;
 
     DEBUG ("Proceeding with discovery of service %s\n", HouseFeedService);
     HouseFeedPolled = 0;
