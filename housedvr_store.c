@@ -219,7 +219,7 @@ nospace:
 
 static const char *dvr_store_daily (const char *method, const char *uri,
                                           const char *data, int length) {
-    static char buffer[655360];
+    static char buffer[131072];
 
     char path[1024];
     int  tail;
