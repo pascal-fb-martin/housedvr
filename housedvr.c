@@ -68,9 +68,9 @@ static const char *dvr_status (const char *method, const char *uri,
     int cursor = 0;
 
     cursor += snprintf (buffer, sizeof(buffer),
-                        "{\"host\":\"%s\",\"proxy\":\"%s\",\"timestamp\":%d,"
+                        "{\"host\":\"%s\",\"proxy\":\"%s\",\"timestamp\":%lld,"
                             "\"dvr\":{",
-                        HostName, houseportal_server(), (long)time(0));
+                        HostName, houseportal_server(), (long long)time(0));
 
     cursor += housedvr_feed_status (buffer+cursor, sizeof(buffer)-cursor);
     cursor += snprintf (buffer+cursor, sizeof(buffer)-cursor, ",");
@@ -110,8 +110,6 @@ static void dvr_protect (const char *method, const char *uri) {
 }
 
 int main (int argc, const char **argv) {
-
-    const char *error;
 
     // These strange statements are to make sure that fds 0 to 2 are
     // reserved, since this application might output some errors.

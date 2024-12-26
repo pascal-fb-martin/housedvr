@@ -98,7 +98,7 @@ static const char *dvr_store_top (const char *method, const char *uri,
         while (p) {
             if ((p->d_type == DT_DIR) && (isdigit(p->d_name[0]))) {
                 cursor += snprintf (buffer+cursor, sizeof(buffer)-cursor,
-                                    "%s%d", sep, p->d_name);
+                                    "%s%s", sep, p->d_name);
                 if (cursor >= sizeof(buffer)) goto nospace;
                 sep = ",";
             }
@@ -342,9 +342,7 @@ static int housedvr_store_used (const struct statvfs *fs) {
 
 int housedvr_store_status (char *buffer, int size) {
 
-    int i;
     int cursor = 0;
-    const char *prefix = "";
 
     struct statvfs storage;
 
@@ -389,7 +387,6 @@ static int housedvr_store_oldest (const char *parent) {
 static void housedvr_store_delete (const char *parent) {
 
     char path[1024];
-    int oldest = 9999;
 
     DEBUG ("delete %s\n", parent);
     DIR *dir = opendir (parent);
@@ -487,7 +484,7 @@ void housedvr_store_background (time_t now) {
                 if (used <= HouseDvrMaxSpace) break;
 
                 DEBUG ("Proceeding with disk cleanup (disk %d%% full)\n",
-                       ((storage.f_blocks - storage.f_bavail) * 100) / storage.f_blocks);
+                       (int)(((storage.f_blocks - storage.f_bavail) * 100) / storage.f_blocks));
                 houselog_event ("DISK", HouseDvrStorage, "FULL", "%d%% USED", used);
                 housedvr_store_cleanup();
             }

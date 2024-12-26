@@ -35,7 +35,7 @@ clean:
 rebuild: clean all
 
 %.o: %.c
-	gcc -c -g -O -o $@ $<
+	gcc -c -Wall -g -O -o $@ $<
 
 housedvr: $(OBJS)
 	gcc -g -O -o housedvr $(OBJS) -lhouseportal -lechttp -lssl -lcrypto -lgpiod -lrt

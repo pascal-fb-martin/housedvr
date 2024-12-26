@@ -433,10 +433,7 @@ static void housedvr_feed_checked
 
    const char *serverurl = (const char *) origin;
    ParserToken tokens[32];
-   char path[256];
    int  count = 32;
-   int  i;
-   const char *space = "0";
 
    status = echttp_redirected("GET");
    if (!status) {
@@ -530,7 +527,7 @@ static const char *dvr_feed_declare (const char *method,
     if (!admin) admin = url;
 
     if (name && url && space) {
-        char device[128];
+        char device[64];
         char feed[128];
         char devurl[256];
         int i;
@@ -601,9 +598,9 @@ int housedvr_feed_status (char *buffer, int size) {
 
         cursor += snprintf (buffer+cursor, size-cursor,
                             "%s{\"name\":\"%s\",\"url\":\"%s\""
-                                ",\"timestamp\":%d}",
+                                ",\"timestamp\":%lld}",
                             prefix, Feeds[i].name, Feeds[i].url,
-                                Feeds[i].timestamp);
+                                (long long)(Feeds[i].timestamp));
         if (cursor >= size) goto overflow;
         prefix = ",";
     }

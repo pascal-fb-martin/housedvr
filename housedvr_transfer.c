@@ -352,7 +352,6 @@ static void housedvr_transfer_end (time_t now, int status) {
 
 int housedvr_transfer_status (char *buffer, int size) {
 
-    int i;
     int cursor = 0;
     struct TransferFile *queue = TransferQueue;
     const char *sep = "";
@@ -382,7 +381,6 @@ overflow:
 void housedvr_transfer_background (time_t now) {
 
     static time_t lastcheck = 0;
-    static int lastday = 0;
 
     if (now == lastcheck) return;
     lastcheck = now;
