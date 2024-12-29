@@ -346,6 +346,7 @@ static void housedvr_transfer_end (time_t now, int status) {
         TransferComplete = item;
     TransferCompleteLast = item;
     item->timestamp = now;
+    item->next = 0;
 
     if (TransferQueue) housedvr_transfer_start (now);
 }
