@@ -110,6 +110,15 @@ static time_t HouseFeedNextScan = 0;
 static int    HouseFeedPolled = 0;
 static int    HouseFeedCheckPeriod = 30;
 
+// This function is used to stop HouseDvr when a watchdog triggers.
+// Watchdogs are used to detect a situation that should never have
+// happened.
+//
+static void crashandburn (void) {
+    static char *InvalidPointer = (char *)1;
+    InvalidPointer[0] = 0; // Generate a crash, by choice.
+}
+
 static int housedvr_feed_uptodate (const char *name, long long updated) {
 
     int i;
@@ -230,11 +239,19 @@ static void housedvr_feed_refresh (const char *server) {
 
 static void housedvr_feed_prune (time_t now) {
 
+    static time_t FeedWatchDog = 0;
+    static time_t ServerWatchDog = 0;
+
     int i;
+    int feedlive = 0;
+    int serverlive = 0;
     time_t deadline = now - 180;
 
     for (i = FeedsCount-1; i >= 0; --i) {
-        if (Feeds[i].timestamp > deadline) continue;
+        if (Feeds[i].timestamp > deadline) {
+            feedlive += 1;
+            continue;
+        }
         Feeds[i].timestamp = 0;
         if (Feeds[i].name) {
             DEBUG ("Feed %s at %s pruned\n", Feeds[i].name, Feeds[i].url);
@@ -247,13 +264,42 @@ static void housedvr_feed_prune (time_t now) {
         }
     }
     for (i = ServersCount-1; i >= 0; --i) {
-        if (Servers[i].timestamp > deadline) continue;
+        if (Servers[i].timestamp > deadline) {
+            serverlive += 1;
+            continue;
+        }
         if (Servers[i].name[0]) {
             houselog_event
                 ("CCTV", Servers[i].name, "PRUNED", "ADMIN %s", Servers[i].adminurl);
             Servers[i].timestamp = 0;
             Servers[i].name[0] = 0;
             Servers[i].adminurl[0] = 0;
+        }
+    }
+
+    // Once HouseDvr ended up unable of discovering any other service, but
+    // kept running. Still no idea how it happened. Use watchdogs to detect
+    // this type of situation and die with a coredump. The Linux service
+    // system is responsible for keeping the coredump and restarting HouseDvr.
+    // This way there is data to analyze, and the restart helps the system
+    // to "repair" itself.
+    //
+    if (feedlive > 0) {
+        FeedWatchDog = 0;
+    } else if (FeedsCount > 0) {
+        if (FeedWatchDog == 0) {
+            FeedWatchDog = now;
+        } else if (FeedWatchDog + 300 < now) {
+            crashandburn();
+        }
+    }
+    if (serverlive > 0) {
+        ServerWatchDog = 0;
+    } else if (ServersCount > 0) {
+        if (ServerWatchDog == 0) {
+            ServerWatchDog = now;
+        } else if (ServerWatchDog + 300 < now) {
+            crashandburn();
         }
     }
 }
