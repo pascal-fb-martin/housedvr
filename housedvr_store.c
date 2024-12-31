@@ -192,7 +192,7 @@ static const char *dvr_store_monthly (const char *method, const char *uri,
     int  tail = snprintf (path, sizeof(path), "%s/%s/%02d/",
                           HouseDvrStorage, year, local.tm_mon+1);
 
-    for (i = 1; i < 31; ++i) {
+    for (i = 1; i <= 31; ++i) {
         const char *found = ",false";
         snprintf (path+tail, sizeof(path)-tail, "%02d", local.tm_mday);
         if (!stat (path, &info)) {
