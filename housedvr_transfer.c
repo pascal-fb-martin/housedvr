@@ -77,49 +77,130 @@
 
 #define DEBUG if (echttp_isdebug()) printf
 
-struct TransferFile;
+#define TRANSFER_STATE_EMPTY  0 // MUST BE ZERO
+#define TRANSFER_STATE_IDLE   1
+#define TRANSFER_STATE_ACTIVE 2
+#define TRANSFER_STATE_DONE   3
+#define TRANSFER_STATE_FAILED 4
 
-#define TRANSFER_STATE_IDLE   0
-#define TRANSFER_STATE_GOING  1
-#define TRANSFER_STATE_DONE   2
-#define TRANSFER_STATE_FAILED 3
-
-#define TRANSFER_LIFETIME 600
-
+// This module uses a queue of transfer requests. All transfers are
+// serialized: there is only one transfer going at any time.
+//
+// The queue is implemented as a circular list (fixed array):
+// * avoid heap problems (leaks, double free, dangling pointer, etc.)
+// * No unbounded memory allocation.
+// * keep the most recent transfer completed as a cache.
+//
+// New transfer requests are added using the TransferProducer cursor.
+// The TransferConsumer cursor points to the next transfer to start.
+// TransferProducer == TransferConsumer: the queue is empty.
+// next(TransferProducer) == TransferConsumer: the queue is full.
+//
+// If the queue becomes full, the ignored files will be periodically
+// notified again and again anyway, so no need for an infinite queue.
+//
+// All items from TransferConsumer up to and excluding TransferProducer are
+// transfers either ongoing or idle.
+//
+// All items from TransferProducer up to and excluding TransferConsumer are
+// either empty of transfers already executed, kept as a cache.
+//
 struct TransferFile {
     int state;
     int size;
     int offset;
-    time_t timestamp;
-    char *feed;
-    char *path;
-    struct TransferFile *next;
+    time_t initiated;
+    char feed[128];
+    char path[256];
 };
-
-static struct TransferFile *TransferComplete = 0;
-static struct TransferFile *TransferCompleteLast = 0;
 static struct TransferFile *TransferQueue = 0;
-static struct TransferFile *TransferQueueLast = 0;
+static int TransferQueueSize = 0;
+
+static int TransferConsumer = 0;
+static int TransferProducer = 0;
+
+
+static void crashandburn (const char *file, int line) {
+    char *invalid = (char *)1;
+    printf ("Invalid programm state at %s line %d\n", file, line);
+    fflush (stdout);
+    *invalid = 0; // Crash on purpose.
+}
 
 void housedvr_transfer_initialize (int argc, const char **argv) {
+    int i;
+    const char *size = 0;
+    for (i = 1; i < argc; ++i) {
+        echttp_option_match ("-dvr-queue=", argv[i], &size);
+    }
+    TransferQueueSize = 128; // Default size.
+    if (size) TransferQueueSize = atoi (size);
+    if (TransferQueueSize < 16) TransferQueueSize = 16; // self protection
 
-    //TBD
+    TransferQueue = calloc (TransferQueueSize, sizeof(struct TransferFile));
+}
+
+int housedvr_transfer_next (int index) {
+    if (++index >= TransferQueueSize) return 0;
+    return index;
 }
 
 void housedvr_transfer_notify (const char *feed, const char *path, int size) {
 
-    int i;
-    time_t now = time(0);
     int cached = 0;
-    char fullpath[512];
-    struct TransferFile *cursor = 0;
+    struct TransferFile *cursor;
 
-    // We need to make sure that the directory tree does exist.
+    // Was the file already transfered recently?
     //
+    int index = TransferProducer;
+    if (index == TransferConsumer) // If empty, all slots are "past" transfer.
+        index = housedvr_transfer_next(index);
+    for (; index != TransferConsumer; index = housedvr_transfer_next(index)) {
+
+        cursor = TransferQueue + index;
+        if (strcmp (cursor->path, path)) continue;
+
+        cached = 1;
+        switch (cursor->state) {
+            case TRANSFER_STATE_DONE:
+                if (cursor->size == size) return; // Already done.
+                break;
+            case TRANSFER_STATE_FAILED:
+                break; // Keep looking for a successful one.
+            default:
+                crashandburn (__FILE__, __LINE__); // Should never happen.
+        }
+    }
+
+    // Is the file already queued for transfer?
+    //
+    for (index = TransferConsumer;
+         index != TransferProducer; index = housedvr_transfer_next(index)) {
+
+        cursor = TransferQueue + index;
+        if (strcmp (cursor->path, path)) continue;
+
+        cached = 1;
+        switch (cursor->state) {
+            case TRANSFER_STATE_ACTIVE:
+                if (cursor->size == size) return; // Already in progress.
+                break; // Need to request the transfer again.
+            case TRANSFER_STATE_IDLE:
+                cursor->size = size; // Update the upcoming transfer.
+                return; // Already queued.
+            default:
+                crashandburn (__FILE__, __LINE__); // Should never happen.
+        }
+    }
+
+    // We need to make sure that the directory tree does exist, eventually.
+    //
+    char fullpath[512];
     if (strstr (path, "..")) return; // Security check: no arbitrary access.
     int fpi = snprintf (fullpath, sizeof(fullpath),
                             "%s/", housedvr_store_root());
     if (fpi >= sizeof(fullpath)) return;
+    int i;
     for (i = 0; path[i] > 0; ++i) {
         if (path[i] == '/') {
             fullpath[fpi] = 0;
@@ -129,31 +210,6 @@ void housedvr_transfer_notify (const char *feed, const char *path, int size) {
         if (fpi >= sizeof(fullpath)) return;
     }
     fullpath[fpi] = 0;
-
-    // Was the file already transfered recently?
-    //
-    for (cursor = TransferComplete; cursor; cursor = cursor->next) {
-        if (!strcmp (cursor->path, path)) {
-            cursor->timestamp = now; // Avoid cleaning it up for now.
-            cached = 1;
-            if (cursor->state == TRANSFER_STATE_FAILED) break; // Redo it.
-            if (cursor->size == size) return; // Already transferred.
-            break;
-        }
-    }
-
-    // Is the file queued for transfer?
-    for (cursor = TransferQueue; cursor; cursor = cursor->next) {
-        if (!strcmp (cursor->path, path)) {
-            if (cursor->size == size) return; // Already queued.
-            if (cursor->state == TRANSFER_STATE_IDLE) {
-                cursor->size = size; // Update before the transfer starts.
-                return;
-            }
-            cached = 1;
-            break;
-        }
-    }
 
     if (! cached) {
         // We did not find this file in our recent transfers, so the
@@ -165,44 +221,27 @@ void housedvr_transfer_notify (const char *feed, const char *path, int size) {
         }
     }
 
-    // The file must be new or has changed. Add it to the transfer queue.
+    // The file may be new or have changed. Add it to the transfer queue, if
+    // there is room.
     //
-    cursor = malloc (sizeof(struct TransferFile));
-    cursor->timestamp = time(0);
-    cursor->feed = strdup (feed);
-    cursor->path = strdup (path);
+    int next = housedvr_transfer_next(TransferProducer);
+    if (next == TransferConsumer) {
+        // The queue is full. Ignore this file for now. The notification
+        // will keep coming back anyway.
+        return;
+    }
+    cursor = TransferQueue + TransferProducer;
+    if ((cursor->state == TRANSFER_STATE_ACTIVE) ||
+        (cursor->state == TRANSFER_STATE_IDLE))
+        crashandburn (__FILE__, __LINE__); // Should never happen.
+
+    snprintf (cursor->feed, sizeof(cursor->feed), "%s", feed);
+    snprintf (cursor->path, sizeof(cursor->path), "%s", path);
     cursor->size = size;
     cursor->offset = 0;
-
     cursor->state = TRANSFER_STATE_IDLE;
-    cursor->next = 0;
 
-    // Append to the queue.
-    if (TransferQueueLast) {
-        TransferQueueLast->next = cursor;
-    } else {
-        TransferQueue = cursor;
-    }
-    TransferQueueLast = cursor;
-}
-
-static void housedvr_transfer_free (struct TransferFile *item) {
-    if (item->feed) free (item->feed);
-    if (item->path) free (item->path);
-    free (item);
-}
-
-static void housedvr_transfer_cleanup (time_t now) {
-
-    struct TransferFile *cursor;
-    for (cursor = TransferComplete; cursor; cursor = TransferComplete) {
-        if (cursor->timestamp > now - TRANSFER_LIFETIME) break;
-
-        TransferComplete = cursor->next;
-        if (!TransferComplete) TransferCompleteLast = 0;
-
-        housedvr_transfer_free (cursor);
-    }
+    TransferProducer = next;
 }
 
 static void housedvr_transfer_end (time_t now, int status);
@@ -234,10 +273,11 @@ static void housedvr_transfer_ready
     if (!ascii) return; // Should never happen.
     int total = atoi(ascii);
 
-    if (origin != TransferQueue) return; // Should never happen.
-
-    struct TransferFile *item = TransferQueue;
-    if ((!item) || (item->state != TRANSFER_STATE_GOING)) return;
+    struct TransferFile *item = TransferQueue + TransferConsumer;
+    if (origin != item)
+        crashandburn (__FILE__, __LINE__); // Should never happen.
+    if (item->state != TRANSFER_STATE_ACTIVE)
+        crashandburn (__FILE__, __LINE__); // Should never happen.
 
     // Create the new file and write the already received data, if any.
     int fd = housedvr_transfer_open (item, status);
@@ -264,9 +304,11 @@ static void housedvr_transfer_complete
         return;
     }
 
-    if (origin != TransferQueue) return; // Should never happen.
-    struct TransferFile *item = TransferQueue;
-    if ((!item) || (item->state != TRANSFER_STATE_GOING)) return;
+    struct TransferFile *item = TransferQueue + TransferConsumer;
+    if (origin != item)
+        crashandburn (__FILE__, __LINE__); // Should never happen.
+    if (item->state != TRANSFER_STATE_ACTIVE)
+        crashandburn (__FILE__, __LINE__); // Should never happen.
 
     if ((status / 100) == 2) {
         if (length > 0) {
@@ -280,9 +322,17 @@ static void housedvr_transfer_complete
 }
 
 static void housedvr_transfer_start (time_t now) {
-    struct TransferFile *item = TransferQueue;
-    if (!item) return;
-    item->state = TRANSFER_STATE_GOING;
+
+    if (TransferConsumer == TransferProducer) return; // Nothing to start.
+
+    struct TransferFile *item = TransferQueue + TransferConsumer;
+    if (item->state == TRANSFER_STATE_ACTIVE) return; // Busy.
+
+    if (item->state != TRANSFER_STATE_IDLE)
+        crashandburn (__FILE__, __LINE__); // Should never happen.
+
+    item->state = TRANSFER_STATE_ACTIVE;
+    item->initiated = now;
 
     char url[512];
     snprintf (url, sizeof(url), "%s/recording/%s", item->feed, item->path);
@@ -303,69 +353,91 @@ static void housedvr_transfer_start (time_t now) {
 
 static void housedvr_transfer_end (time_t now, int status) {
 
-    struct TransferFile *item = TransferQueue;
-    if (! item) return; // Self protection.
-    if (item->state != TRANSFER_STATE_GOING) return; // Self protection.
+    struct TransferFile *item = TransferQueue + TransferConsumer;
+    if (item->state != TRANSFER_STATE_ACTIVE)
+        crashandburn (__FILE__, __LINE__); // Should never happen.
 
     if (status / 100 == 2) {
-        item->state = TRANSFER_STATE_DONE;
+        char ascii[16];
+        long long lapsed = (int)(now - item->initiated);
+        if (lapsed > 1) {
+            if (lapsed > 120)
+                snprintf (ascii, sizeof(ascii), " (slow)");
+            else
+                snprintf (ascii, sizeof(ascii), " (%ds)", (int)lapsed);
+        } else {
+            ascii[0] = 0;
+        }
         houselog_event ("TRANSFER", "dvr", "COMPLETE",
-                        "FOR FILE %s at %s", item->path, item->feed);
+                        "FOR FILE %s at %s%s", item->path, item->feed, ascii);
+        item->state = TRANSFER_STATE_DONE;
     } else {
-        item->state = TRANSFER_STATE_FAILED;
         houselog_event ("TRANSFER", "dvr", "FAILED",
                         "CODE %d FOR FILE %s at %s",
                         status, item->path, item->feed);
+        item->state = TRANSFER_STATE_FAILED;
     }
-
-    // Remove from the transfer schedule queue.
-    TransferQueue = TransferQueue->next;
-    if (! TransferQueue) TransferQueueLast = 0;
-
-    // If the file is present in the transfer completed list already,
-    // then just update that entry instead of duplicating it.
-    // (The file may have been transferred twice if the file size changed.)
-    //
-    struct TransferFile *cursor;
-    for (cursor = TransferComplete; cursor; cursor = cursor->next) {
-        if (!strcmp (cursor->path, item->path)) {
-            cursor->timestamp = now;
-            cursor->state = item->state;
-            cursor->size = item->size;
-            housedvr_transfer_free (item);
-            return;
-        }
-    }
-
-    // Otherwise, add this item to the transfer completed list (even
-    // if this transfer failed: keep the status to force a retry later).
-    //
-    if (TransferCompleteLast)
-        TransferCompleteLast->next = item;
-    else
-        TransferComplete = item;
-    TransferCompleteLast = item;
-    item->timestamp = now;
-    item->next = 0;
-
-    if (TransferQueue) housedvr_transfer_start (now);
+    TransferConsumer = housedvr_transfer_next (TransferConsumer);
+    housedvr_transfer_start (now);
 }
 
 int housedvr_transfer_status (char *buffer, int size) {
 
     int cursor = 0;
-    struct TransferFile *queue = TransferQueue;
     const char *sep = "";
 
     cursor = snprintf (buffer, size, "\"queue\":[");
     if (cursor >= size) goto overflow;
 
-    while (queue) {
+    // List all entries in the queue, in FIFO order, i.e. oldest first.
+    //
+    int index = TransferProducer;
+    if (index == TransferConsumer) // If empty, all slots are "past" transfer.
+        index = housedvr_transfer_next(index);
+    for (; index != TransferConsumer; index = housedvr_transfer_next(index)) {
+
+        struct TransferFile *item = TransferQueue + index;
+        const char *state = 0;
+        switch (item->state) {
+            case TRANSFER_STATE_EMPTY:
+                break;
+            case TRANSFER_STATE_FAILED:
+                state = ",\"state\":\"failed\"";
+                break;
+            case TRANSFER_STATE_DONE:
+                state = ",\"state\":\"done\"";
+                break;
+            default:
+                crashandburn (__FILE__,__LINE__);
+        }
+        if (!state) continue; // Ignore empty slots.
+
         cursor += snprintf (buffer+cursor, size-cursor,
-                            "%s{\"feed\":\"%s\", \"path\":\"%s\"}]",
-                            sep, queue->feed, queue->path);
+                            "%s{\"feed\":\"%s\", \"path\":\"%s\"%s}",
+                            sep, item->feed, item->path, state);
         if (cursor >= size) goto overflow;
-        queue = queue->next;
+        sep = ",";
+    }
+    for (index = TransferConsumer;
+         index != TransferProducer; index = housedvr_transfer_next(index)) {
+
+        struct TransferFile *item = TransferQueue + index;
+        const char *state = 0;
+        switch (item->state) {
+            case TRANSFER_STATE_ACTIVE:
+                state = ",\"state\":\"active\"";
+                break;
+            case TRANSFER_STATE_IDLE:
+                state = "";
+                break;
+            default:
+                crashandburn (__FILE__,__LINE__);
+        }
+
+        cursor += snprintf (buffer+cursor, size-cursor,
+                            "%s{\"feed\":\"%s\", \"path\":\"%s\"%s}",
+                            sep, item->feed, item->path, state);
+        if (cursor >= size) goto overflow;
         sep = ",";
     }
     cursor += snprintf (buffer+cursor, size-cursor, "]");
@@ -385,10 +457,6 @@ void housedvr_transfer_background (time_t now) {
 
     if (now == lastcheck) return;
     lastcheck = now;
-
-    housedvr_transfer_cleanup (now);
-
-    if (TransferQueue && (TransferQueue->state == TRANSFER_STATE_IDLE))
-        housedvr_transfer_start (now);
+    housedvr_transfer_start (now);
 }
 

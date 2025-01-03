@@ -140,6 +140,13 @@ function listQueue (data) {
       column.innerHTML = queue.path;
       line.appendChild(column);
 
+      column = document.createElement("td");
+      if (queue.state)
+          column.innerHTML = queue.state;
+      else
+          column.innerHTML = '';
+      line.appendChild(column);
+
       table.appendChild(line);
    }
 }
@@ -228,7 +235,8 @@ window.onload = function() {
    <table class="housewidetable queue" border="0">
       <tr>
          <th width="30%">SOURCE</th>
-         <th width="70%">NAME</th>
+         <th width="60%">NAME</th>
+         <th width="10%">STATUS</th>
       </tr>
    </table>
    </p>
