@@ -106,9 +106,10 @@ static int               FeedsSize = 0;
 
 static const char *HouseFeedService = "cctv"; // Default is security DVR.
 
-static time_t HouseFeedNextScan = 0;
+static time_t HouseFeedNextFullScan = 0;
 static int    HouseFeedPolled = 0;
 static int    HouseFeedCheckPeriod = 30;
+
 
 // This function is used to stop HouseDvr when a watchdog triggers.
 // Watchdogs are used to detect a situation that should never have
@@ -453,9 +454,10 @@ static void housedvr_feed_scanned
            }
        }
        if (stable) {
-           housedvr_transfer_notify (origin,
-                                     fileinfo[filepath].value.string,
-                                     (int)(fileinfo[size].value.integer));
+           int r = housedvr_transfer_notify (origin,
+                                             fileinfo[filepath].value.string,
+                                             (int)(fileinfo[size].value.integer));
+           if (!r) HouseFeedNextFullScan = now + 10; // Rush a full scan soon.
        }
    }
 }
@@ -549,7 +551,7 @@ static void housedvr_feed_poll
 
     time_t now = *((time_t *)context);
 
-    if (now < HouseFeedNextScan) {
+    if (now < HouseFeedNextFullScan) {
         housedvr_feed_check (serverurl);
     } else {
         housedvr_feed_scan (serverurl);
@@ -697,12 +699,12 @@ void housedvr_feed_background (time_t now) {
     // The timing of the pruning mechanism is not impacted.
     //
     if (StartPeriodEnd == 0) StartPeriodEnd = now + 60;
-    if (now <= NextCleanup) return;
+    if ((now <= NextCleanup) && (now < HouseFeedNextFullScan)) return;
     NextCleanup = now + 10;
 
     housedvr_feed_prune (now);
 
-    if (now < HouseFeedNextScan) {
+    if (now < HouseFeedNextFullScan) {
         if (now <= NextDiscovery && now >= StartPeriodEnd) return;
     }
     NextDiscovery = now + HouseFeedCheckPeriod;
@@ -712,12 +714,12 @@ void housedvr_feed_background (time_t now) {
     housediscovered (HouseFeedService, &now, housedvr_feed_poll);
 
     if (HouseFeedPolled) {
-        if (now >= HouseFeedNextScan) {
-            HouseFeedNextScan = now + 300; // Next full scan in 5 minutes.
+        if (now >= HouseFeedNextFullScan) {
+            HouseFeedNextFullScan = now + 300; // Next full scan in 5 minutes.
         }
-    } else if (HouseFeedNextScan > 0) {
+    } else if (HouseFeedNextFullScan > 0) {
         // We lost contact with all CCTV servers. Time to resync.
-        HouseFeedNextScan = 0;
+        HouseFeedNextFullScan = 0;
     }
 }
 

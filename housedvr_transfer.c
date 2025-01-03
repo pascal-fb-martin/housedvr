@@ -31,13 +31,16 @@
  *
  *    Initialize this module.
  *
- * void housedvr_transfer_notify (const char *feed, const char *path, int size);
+ * int housedvr_transfer_notify (const char *feed, const char *path, int size);
  *
  *    Tell this module that a specified file is available on the specified
  *    feed. The feed name is actually an URL to use as a base for the transfer.
  *
  *    The transfer does not start right away. If a transfer is necessary, it
  *    is scheduled for later, with transfers from one feed being serialized.
+ *
+ *    This function returns 1 if the notification was successfully processed,
+ *    or 0 if it had to be ignored for lack of resource (e.g. queue full).
  *
  * void housedvr_transfer_background (time_t now);
  *
@@ -68,12 +71,13 @@
 #include <echttp.h>
 #include <echttp_static.h>
 #include <echttp_json.h>
+#include <echttp_hash.h> // Just for the signature.
 
 #include "houselog.h"
 #include "housediscover.h"
 
 #include "housedvr_store.h"
-#include "housedvr_store.h"
+#include "housedvr_transfer.h"
 
 #define DEBUG if (echttp_isdebug()) printf
 
@@ -105,7 +109,21 @@
 // All items from TransferProducer up to and excluding TransferConsumer are
 // either empty of transfers already executed, kept as a cache.
 //
+// Finding an item in the queue uses a linear search. This could be the most
+// expensive action in HouseDvr: if the cache is 128 items long, considering
+// an average of 32 items reported by the HouseMotion services, that means
+// doing 4096 string compare operations each cycle. Then all the items paths
+// tend to start with the same 14 characters (date), so there are more than
+// 57000 loops in strcmp() each cycle. Using a hash signature is one way to
+// filter out most non-matching paths in one CPU instruction, removing the
+// innermost loop and achieving a 14 times acceleration of the search.
+//
+// (This could use a full hash mechanism, but this is one step toward it.
+// Using echttp_cache is not trivial because it does not have a "remove"
+// operation.)
+// 
 struct TransferFile {
+    unsigned int signature;
     int state;
     int size;
     int offset;
@@ -136,6 +154,7 @@ void housedvr_transfer_initialize (int argc, const char **argv) {
     TransferQueueSize = 128; // Default size.
     if (size) TransferQueueSize = atoi (size);
     if (TransferQueueSize < 16) TransferQueueSize = 16; // self protection
+    if (TransferQueueSize > 256) TransferQueueSize = 256; // self protection
 
     TransferQueue = calloc (TransferQueueSize, sizeof(struct TransferFile));
 }
@@ -145,10 +164,11 @@ int housedvr_transfer_next (int index) {
     return index;
 }
 
-void housedvr_transfer_notify (const char *feed, const char *path, int size) {
+int housedvr_transfer_notify (const char *feed, const char *path, int size) {
 
     int cached = 0;
     struct TransferFile *cursor;
+    unsigned int signature = echttp_hash_signature (path);
 
     // Was the file already transfered recently?
     //
@@ -158,12 +178,13 @@ void housedvr_transfer_notify (const char *feed, const char *path, int size) {
     for (; index != TransferConsumer; index = housedvr_transfer_next(index)) {
 
         cursor = TransferQueue + index;
+        if (cursor->signature != signature) continue; // Faster than strcmp().
         if (strcmp (cursor->path, path)) continue;
 
         cached = 1;
         switch (cursor->state) {
             case TRANSFER_STATE_DONE:
-                if (cursor->size == size) return; // Already done.
+                if (cursor->size == size) return 1; // Already done.
                 break;
             case TRANSFER_STATE_FAILED:
                 break; // Keep looking for a successful one.
@@ -178,16 +199,17 @@ void housedvr_transfer_notify (const char *feed, const char *path, int size) {
          index != TransferProducer; index = housedvr_transfer_next(index)) {
 
         cursor = TransferQueue + index;
+        if (cursor->signature != signature) continue; // Faster than strcmp().
         if (strcmp (cursor->path, path)) continue;
 
         cached = 1;
         switch (cursor->state) {
             case TRANSFER_STATE_ACTIVE:
-                if (cursor->size == size) return; // Already in progress.
+                if (cursor->size == size) return 1; // Already in progress.
                 break; // Need to request the transfer again.
             case TRANSFER_STATE_IDLE:
                 cursor->size = size; // Update the upcoming transfer.
-                return; // Already queued.
+                return 1; // Already queued.
             default:
                 crashandburn (__FILE__, __LINE__); // Should never happen.
         }
@@ -196,10 +218,10 @@ void housedvr_transfer_notify (const char *feed, const char *path, int size) {
     // We need to make sure that the directory tree does exist, eventually.
     //
     char fullpath[512];
-    if (strstr (path, "..")) return; // Security check: no arbitrary access.
+    if (strstr (path, "..")) return 1; // Security check: no arbitrary access.
     int fpi = snprintf (fullpath, sizeof(fullpath),
                             "%s/", housedvr_store_root());
-    if (fpi >= sizeof(fullpath)) return;
+    if (fpi >= sizeof(fullpath)) return 1; // Cannot handle this name anyway.
     int i;
     for (i = 0; path[i] > 0; ++i) {
         if (path[i] == '/') {
@@ -207,7 +229,7 @@ void housedvr_transfer_notify (const char *feed, const char *path, int size) {
             mkdir (fullpath, 0755);
         }
         fullpath[fpi++] = path[i];
-        if (fpi >= sizeof(fullpath)) return;
+        if (fpi >= sizeof(fullpath)) return 1;
     }
     fullpath[fpi] = 0;
 
@@ -217,7 +239,7 @@ void housedvr_transfer_notify (const char *feed, const char *path, int size) {
         //
         struct stat filestat;
         if (stat (fullpath, &filestat) == 0) { // File exists.
-            if (filestat.st_size == size) return; // .. and is whole.
+            if (filestat.st_size == size) return 1; // .. and is whole.
         }
     }
 
@@ -228,13 +250,14 @@ void housedvr_transfer_notify (const char *feed, const char *path, int size) {
     if (next == TransferConsumer) {
         // The queue is full. Ignore this file for now. The notification
         // will keep coming back anyway.
-        return;
+        return 0;
     }
     cursor = TransferQueue + TransferProducer;
     if ((cursor->state == TRANSFER_STATE_ACTIVE) ||
         (cursor->state == TRANSFER_STATE_IDLE))
         crashandburn (__FILE__, __LINE__); // Should never happen.
 
+    cursor->signature = signature;
     snprintf (cursor->feed, sizeof(cursor->feed), "%s", feed);
     snprintf (cursor->path, sizeof(cursor->path), "%s", path);
     cursor->size = size;
@@ -242,6 +265,7 @@ void housedvr_transfer_notify (const char *feed, const char *path, int size) {
     cursor->state = TRANSFER_STATE_IDLE;
 
     TransferProducer = next;
+    return 1;
 }
 
 static void housedvr_transfer_end (time_t now, int status);
