@@ -28,7 +28,9 @@
  * This module is not configured by the user: it learns about video feeds
  * on its own.
  *
- * A video feed is eventually removed if its registration is not renewed.
+ * A video feed is eventually "erased" if its registration is not renewed.
+ * A video feed is never fully removed because there might be recordings
+ * associated with it.
  *
  * TBD: this module will eventually actively discover feed servers, and
  * individual feeds, using the HousePortal mechanism for service discovery.
@@ -74,6 +76,7 @@
 #include <echttp_json.h>
 
 #include "housediscover.h"
+#include "housedepositorstate.h"
 #include "houselog.h"
 
 #include "housedvr_feed.h"
@@ -185,35 +188,48 @@ static int housedvr_feed_register (const char *name,
                                    const char *server, const char *url) {
 
     int i;
+    int available = -1; // Probably obsolete (we don't forget old cameras).
     int new = -1;
 
     for (i = FeedsCount-1; i >= 0; --i) {
         if (Feeds[i].name) {
             if (!strcmp (name, Feeds[i].name)) break;
         } else {
-            new = i;
+            available = i;
         }
     }
-    if (i < 0) {
-        if (new < 0) {
+    if (i < 0) { // Feed not yet listed.
+        if (available < 0) {
             if (FeedsCount >= FeedsSize) {
                 FeedsSize += 16;
                 Feeds = realloc (Feeds, FeedsSize * sizeof(Feeds[0]));
             }
             i = FeedsCount++;
         } else {
-            i = new;
+            i = available;
         }
         Feeds[i].name = strdup(name);
+        if (!server) { // Restoring from a ghost of ancient time.
+            Feeds[i].timestamp = 0;
+            Feeds[i].server[0] = 0;
+            Feeds[i].url[0] = 0;
+            return 0;
+        }
+        // This is a real new camera, not even recorded as a ghost.
+        housedepositor_state_changed();
         new = 1;
-    } else {
+    } else { // Feed already listed.
+        if (!server) return 0; // Old news, nothing to update.
         new = 0;
     }
+
     if (strcmp (Feeds[i].url, url)) {
         snprintf (Feeds[i].url, sizeof(Feeds[i].url), "%s", url);
+        new = 1; // This location is new.
     }
     if (strcmp (Feeds[i].server, server)) {
         snprintf (Feeds[i].server, sizeof(Feeds[i].server), "%s", server);
+        new = 1; // This location is new.
     }
     Feeds[i].timestamp = time(0);
     return new;
@@ -254,12 +270,13 @@ static void housedvr_feed_prune (time_t now) {
             continue;
         }
         Feeds[i].timestamp = 0;
-        if (Feeds[i].name) {
+        if (Feeds[i].server[0]) {
+            // Forget where the camera came from but do not delete this
+            // feed entry, as we may have stored video recordings from it.
+            //
             DEBUG ("Feed %s at %s pruned\n", Feeds[i].name, Feeds[i].url);
             houselog_event
                 ("FEED", Feeds[i].name, "PRUNED", "STREAM %s", Feeds[i].url);
-            free (Feeds[i].name);
-            Feeds[i].name = 0;
             Feeds[i].server[0] = 0;
             Feeds[i].url[0] = 0;
         }
@@ -641,7 +658,6 @@ int housedvr_feed_status (char *buffer, int size) {
 
     for (i = 0; i < FeedsCount; ++i) {
 
-        if (!Feeds[i].timestamp) continue;
         if (!Feeds[i].name) continue;
 
         cursor += snprintf (buffer+cursor, size-cursor,
@@ -665,6 +681,40 @@ overflow:
     return 0;
 }
 
+static void housedvr_feed_restore (void) {
+
+    DEBUG ("Restore from state backup\n");
+    int i = 0;
+    for (;;) {
+        char path[128];
+        snprintf (path, sizeof(path), ".cameras[%d]", i++);
+        const char *name = housedepositor_state_get_string (path);
+        if (!name) break;
+        housedvr_feed_register (name, 0, 0);
+    }
+}
+
+static int housedvr_feed_save (char *buffer, int size) {
+
+    int cursor = snprintf (buffer, size, "\"cameras\":[");
+    if (cursor >= size) return 0;
+
+    DEBUG ("Save to state backup\n");
+    int i;
+    const char *sep = "";
+    for (i = 0; i < FeedsCount; ++i) {
+        if (Feeds[i].name) {
+            cursor += snprintf (buffer+cursor, size-cursor,
+                                "%s\"%s\"", sep, Feeds[i].name);
+            if (cursor >= size) return 0;
+            sep = ",";
+        }
+    }
+    cursor += snprintf (buffer+cursor, size-cursor, "]");
+    if (cursor >= size) return 0;
+    return cursor;
+}
+
 void housedvr_feed_initialize (int argc, const char **argv) {
 
     int i;
@@ -678,6 +728,14 @@ void housedvr_feed_initialize (int argc, const char **argv) {
 
     // Support the legacy mode (each server declares its video feeds):
     echttp_route_uri ("/dvr/source/declare", dvr_feed_declare);
+
+    // Restore the list of known camera. Some video recording might still
+    // originate from cameras that are no longer operational, so we keep
+    // the full list.
+    // TBD: until when?
+    // 
+    housedepositor_state_listen (housedvr_feed_restore);
+    housedepositor_state_register (housedvr_feed_save);
 }
 
 void housedvr_feed_background (time_t now) {

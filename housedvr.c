@@ -52,6 +52,8 @@
 
 #include "houseportalclient.h"
 #include "housediscover.h"
+#include "housedepositor.h"
+#include "housedepositorstate.h"
 #include "houselog.h"
 
 #include "housedvr_feed.h"
@@ -84,8 +86,13 @@ static const char *dvr_status (const char *method, const char *uri,
 
 static void dvr_background (int fd, int mode) {
 
+    static time_t LastCall = 0;
     static time_t LastRenewal = 0;
     time_t now = time(0);
+
+    // Avoid calling the background functions too often.
+    if (now == LastCall) return;
+    LastCall = now;
 
     if (use_houseportal) {
         static const char *path[] = {"dvr:/dvr"};
@@ -97,11 +104,14 @@ static void dvr_background (int fd, int mode) {
             LastRenewal = now;
         }
     }
+
     housedvr_store_background(now);
     housedvr_feed_background(now);
     housedvr_transfer_background(now);
 
     housediscover (now);
+    housedepositor_periodic (now);
+    housedepositor_state_background (now);
     houselog_background (now);
 }
 
@@ -131,6 +141,10 @@ int main (int argc, const char **argv) {
     }
     housediscover_initialize (argc, argv);
     houselog_initialize ("dvr", argc, argv);
+
+    housedepositor_initialize (argc, argv);
+    housedepositor_state_load ("dvr", argc, argv);
+    housedepositor_state_share (1); // Not harmful even with multiple DVRs.
 
     echttp_cors_allow_method("GET");
     echttp_protect (0, dvr_protect);

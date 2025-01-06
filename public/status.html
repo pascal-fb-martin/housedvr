@@ -24,6 +24,8 @@ function friendlySize (size) {
 
 function friendlyTime (timestamp) {
 
+    if (!timestamp) return "";
+
     var datetime = new Date(timestamp * 1000);
     datetime = datetime.toLocaleString();;
     if (datetime.indexOf(" GMT") > 0)
@@ -79,10 +81,14 @@ function listCameras (data) {
       line.appendChild(column);
 
       column = document.createElement("td");
-      var link = document.createElement("a");
-      link.href = feed.url;
-      link.innerHTML = link.href;
-      column.appendChild(link);
+      if (feed.url) {
+          var link = document.createElement("a");
+          link.href = feed.url;
+          link.innerHTML = link.href;
+          column.appendChild(link);
+      } else {
+          column.innerHTML = '';
+      }
       line.appendChild(column);
 
       column = document.createElement("td");
