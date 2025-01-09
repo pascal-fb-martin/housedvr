@@ -113,6 +113,8 @@ static time_t HouseFeedNextFullScan = 0;
 static int    HouseFeedPolled = 0;
 static int    HouseFeedCheckPeriod = 30;
 
+static time_t HouseFeedStateChanged = 0;
+
 
 // This function is used to stop HouseDvr when a watchdog triggers.
 // Watchdogs are used to detect a situation that should never have
@@ -190,6 +192,7 @@ static int housedvr_feed_register (const char *name,
     int i;
     int available = -1; // Probably obsolete (we don't forget old cameras).
     int new = -1;
+    time_t now = time(0);
 
     for (i = FeedsCount-1; i >= 0; --i) {
         if (Feeds[i].name) {
@@ -216,7 +219,7 @@ static int housedvr_feed_register (const char *name,
             return 0;
         }
         // This is a real new camera, not even recorded as a ghost.
-        housedepositor_state_changed();
+        HouseFeedStateChanged = now;
         new = 1;
     } else { // Feed already listed.
         if (!server) return 0; // Old news, nothing to update.
@@ -231,7 +234,7 @@ static int housedvr_feed_register (const char *name,
         snprintf (Feeds[i].server, sizeof(Feeds[i].server), "%s", server);
         new = 1; // This location is new.
     }
-    Feeds[i].timestamp = time(0);
+    Feeds[i].timestamp = now;
     return new;
 }
 
@@ -696,14 +699,15 @@ static void housedvr_feed_restore (void) {
 
 static int housedvr_feed_save (char *buffer, int size) {
 
-    int cursor = snprintf (buffer, size, "\"cameras\":[");
+    DEBUG ("Save %d feeds to state backup\n", FeedsCount);
+    int cursor = snprintf (buffer, size, ",\"cameras\":[");
     if (cursor >= size) return 0;
 
-    DEBUG ("Save to state backup\n");
     int i;
     const char *sep = "";
     for (i = 0; i < FeedsCount; ++i) {
         if (Feeds[i].name) {
+            DEBUG ("Save feed %s\n", Feeds[i].name);
             cursor += snprintf (buffer+cursor, size-cursor,
                                 "%s\"%s\"", sep, Feeds[i].name);
             if (cursor >= size) return 0;
@@ -745,27 +749,39 @@ void housedvr_feed_background (time_t now) {
     static time_t NextDiscovery = 0;
 
     if (!now) { // This is a manual reset (force a discovery refresh)
-        StartPeriodEnd = 0;
         NextDiscovery = 0;
         return;
     }
+    if (StartPeriodEnd == 0) StartPeriodEnd = now + 60;
 
-    // Poll every 10s for the first minute, then poll every 30 seconds.
+    if (now >= NextCleanup) {
+        NextCleanup = now + 10;
+        housedvr_feed_prune (now);
+    }
+
+    // Delay saving the changed state until after the start period.
+    // This is done so to avoid saving an incomplete state.
+    //
+    if (HouseFeedStateChanged > 0) {
+        if (now > StartPeriodEnd) {
+            housedepositor_state_changed();
+            HouseFeedStateChanged = 0;
+        }
+    }
+
+    // Poll every 10s for the first minute, then poll every 30 seconds (or
+    // whatever was in the command line options) afterward.
+    // If a full scan is overdue, force it regardless of the timing above.
+    //
     // The fast start is to make the whole network recover fast from
     // an outage, when we do not know in which order the systems start.
     // Later on, there is no need to create more traffic.
-    // The timing of the pruning mechanism is not impacted.
     //
-    if (StartPeriodEnd == 0) StartPeriodEnd = now + 60;
-    if ((now <= NextCleanup) && (now < HouseFeedNextFullScan)) return;
-    NextCleanup = now + 10;
-
-    housedvr_feed_prune (now);
-
-    if (now < HouseFeedNextFullScan) {
-        if (now <= NextDiscovery && now >= StartPeriodEnd) return;
-    }
-    NextDiscovery = now + HouseFeedCheckPeriod;
+    if ((now < HouseFeedNextFullScan) && (now < NextDiscovery)) return;
+    if (now < StartPeriodEnd)
+        NextDiscovery = now + 10;
+    else
+        NextDiscovery = now + HouseFeedCheckPeriod;
 
     DEBUG ("Proceeding with discovery of service %s\n", HouseFeedService);
     HouseFeedPolled = 0;
