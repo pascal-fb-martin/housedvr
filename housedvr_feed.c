@@ -257,6 +257,33 @@ static void housedvr_feed_refresh (const char *server) {
     }
 }
 
+// This function is used to prune out the feeds (cameras) no longer
+// listed by a CCTV service in its status.
+// The normal timeout is not used here because the service positively
+// confirmed its list of feeds.
+//
+static void housedvr_feed_zombies (const char *server) {
+
+    int i;
+    time_t deadline = time(0) - HouseFeedCheckPeriod + 1;
+
+    for (i = FeedsCount-1; i >= 0; --i) {
+        if (!strcmp (server, Feeds[i].server)) {
+            if (Feeds[i].timestamp < deadline) {
+                DEBUG ("Feed %s at %s pruned\n", Feeds[i].name, Feeds[i].url);
+                houselog_event ("FEED", Feeds[i].name,
+                                "PRUNED", "STREAM %s", Feeds[i].url);
+                Feeds[i].timestamp = 0;
+                Feeds[i].server[0] = 0;
+                Feeds[i].url[0] = 0;
+            }
+        }
+    }
+}
+
+// This function is used to prune out the server and associated feeds (cameras)
+// when a CCTV service stops responding.
+//
 static void housedvr_feed_prune (time_t now) {
 
     static time_t FeedWatchDog = 0;
@@ -437,6 +464,7 @@ static void housedvr_feed_scanned
                            "ADDED", "STREAM %s", inner->value.string);
        }
    }
+   housedvr_feed_zombies (feedname); // Prune the feeds not listed here.
 
    // Report the recording files reported to the transfer module.
    // (Skip the files that are too recent, as these could still be written to.)
