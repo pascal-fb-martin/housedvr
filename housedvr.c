@@ -60,7 +60,6 @@
 #include "housedvr_store.h"
 #include "housedvr_transfer.h"
 
-static int use_houseportal = 0;
 static char HostName[256];
 
 
@@ -87,24 +86,13 @@ static const char *dvr_status (const char *method, const char *uri,
 static void dvr_background (int fd, int mode) {
 
     static time_t LastCall = 0;
-    static time_t LastRenewal = 0;
     time_t now = time(0);
 
     // Avoid calling the background functions too often.
     if (now == LastCall) return;
     LastCall = now;
 
-    if (use_houseportal) {
-        static const char *path[] = {"dvr:/dvr"};
-        if (now >= LastRenewal + 60) {
-            if (LastRenewal > 0)
-                houseportal_renew();
-            else
-                houseportal_register (echttp_port(4), path, 1);
-            LastRenewal = now;
-        }
-    }
-
+    houseportal_background (now);
     housedvr_store_background(now);
     housedvr_feed_background(now);
     housedvr_transfer_background(now);
@@ -136,8 +124,9 @@ int main (int argc, const char **argv) {
 
     argc = echttp_open (argc, argv);
     if (echttp_dynamic_port()) {
+        static const char *path[] = {"dvr:/dvr"};
         houseportal_initialize (argc, argv);
-        use_houseportal = 1;
+        houseportal_declare (echttp_port(4), path, 1);
     }
     housediscover_initialize (argc, argv);
     houselog_initialize ("dvr", argc, argv);
