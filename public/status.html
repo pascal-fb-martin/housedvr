@@ -134,11 +134,19 @@ function listQueue (data) {
    for (var i = table.childNodes.length - 1; i > 1; i--) {
        table.removeChild(table.childNodes[i]);
    }
+   data.dvr.queue.sort (function (a, b) {
+           return b.start - a.start;
+   });
+
    for (var i = 0; i < data.dvr.queue.length; i++) {
       var line = document.createElement("tr");
       var queue = data.dvr.queue[i];
 
       var column = document.createElement("td");
+      column.innerHTML = friendlyTime (queue.start);
+      line.appendChild(column);
+
+      column = document.createElement("td");
       column.innerHTML = queue.feed;
       line.appendChild(column);
 
@@ -149,6 +157,13 @@ function listQueue (data) {
       column = document.createElement("td");
       if (queue.state)
           column.innerHTML = queue.state;
+      else
+          column.innerHTML = '';
+      line.appendChild(column);
+
+      column = document.createElement("td");
+      if (queue.lapsed)
+          column.innerHTML = ''+queue.lapsed+'s';
       else
           column.innerHTML = '';
       line.appendChild(column);
@@ -240,9 +255,11 @@ window.onload = function() {
    <h1>Transfer Queue</h1>
    <table class="housewidetable queue" border="0">
       <tr>
-         <th width="30%">SOURCE</th>
-         <th width="60%">NAME</th>
-         <th width="10%">STATUS</th>
+         <th width="25%">START</th>
+         <th width="20%">SOURCE</th>
+         <th width="45%">NAME</th>
+         <th width="5%">STATUS</th>
+         <th width="5%">ELAPSED</th>
       </tr>
    </table>
    </p>

@@ -128,6 +128,7 @@ struct TransferFile {
     int size;
     int offset;
     time_t initiated;
+    int duration;
     char feed[128];
     char path[256];
 };
@@ -357,6 +358,7 @@ static void housedvr_transfer_start (time_t now) {
 
     item->state = TRANSFER_STATE_ACTIVE;
     item->initiated = now;
+    item->duration = 0;
 
     char url[512];
     snprintf (url, sizeof(url), "%s/recording/%s", item->feed, item->path);
@@ -383,18 +385,19 @@ static void housedvr_transfer_end (time_t now, int status) {
 
     if (status / 100 == 2) {
         char ascii[16];
-        long long lapsed = (int)(now - item->initiated);
+        int lapsed = (int)(now - item->initiated);
         if (lapsed > 1) {
             if (lapsed > 120)
                 snprintf (ascii, sizeof(ascii), " (slow)");
             else
-                snprintf (ascii, sizeof(ascii), " (%ds)", (int)lapsed);
+                snprintf (ascii, sizeof(ascii), " (%ds)", lapsed);
         } else {
             ascii[0] = 0;
         }
         houselog_event ("TRANSFER", "dvr", "COMPLETE",
                         "FOR FILE %s at %s%s", item->path, item->feed, ascii);
         item->state = TRANSFER_STATE_DONE;
+        item->duration = lapsed;
     } else {
         houselog_event ("TRANSFER", "dvr", "FAILED",
                         "CODE %d FOR FILE %s at %s",
@@ -422,6 +425,7 @@ int housedvr_transfer_status (char *buffer, int size) {
 
         struct TransferFile *item = TransferQueue + index;
         const char *state = 0;
+        char done[128];
         switch (item->state) {
             case TRANSFER_STATE_EMPTY:
                 break;
@@ -429,7 +433,10 @@ int housedvr_transfer_status (char *buffer, int size) {
                 state = ",\"state\":\"failed\"";
                 break;
             case TRANSFER_STATE_DONE:
-                state = ",\"state\":\"done\"";
+                snprintf (done, sizeof(done),
+                          ",\"state\":\"done\",\"lapsed\":%d",
+                          item->duration);
+                state = done;
                 break;
             default:
                 crashandburn (__FILE__,__LINE__);
@@ -437,8 +444,8 @@ int housedvr_transfer_status (char *buffer, int size) {
         if (!state) continue; // Ignore empty slots.
 
         cursor += snprintf (buffer+cursor, size-cursor,
-                            "%s{\"feed\":\"%s\", \"path\":\"%s\"%s}",
-                            sep, item->feed, item->path, state);
+                            "%s{\"start\":%lld,\"feed\":\"%s\", \"path\":\"%s\"%s}",
+                            sep, (long long)(item->initiated), item->feed, item->path, state);
         if (cursor >= size) goto overflow;
         sep = ",";
     }
