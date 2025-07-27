@@ -43,14 +43,3 @@ A video recordings is primarily identified by when it was created, so the file s
 
 Recordings are kept by HouseDvr until the storage becomes full, at which time the oldest recordings are eliminated.
 
-## Compatibility
-
-This service also provides a compatibility API similar to the old [MotionCenter](https://github.com/pascal-fb-martin/motionCenter) API. The existing motion-join script from that project can be used with only minor modifications:
-- add an `admin` HTTP parameter to provide the URL of the Motion web site.
-- change the web server port number to 80.
-- change the web server URI from /api/camera/declare to /dvr/source/declare.
-
-The motion-transfer script from MotionCenter can be used as-is.
-
-The MotionCenter software is being phased out and this compatibility feature will eventually be removed.
-
