@@ -6,6 +6,7 @@ A web service to store and give access to video recordings
 This project is a specialized web server for consolidating, and providing web access to, security video recordings.
 
 This service implements the central server portion of what is a distributed video surveillance system:
+
 * HouseDvr handles the "long term" storage of video recordings. It provides a single consolidated access to all security camera recordings.
 * A number of CCTV services on multiple machines collect and report new recordings from motion detection systems.
 
@@ -20,6 +21,7 @@ The intent is to provide support for multiple motion detection software by imple
 ## Installation
 
 This service depends on the House series environment:
+
 * Install git, icoutils, openssl (libssl-dev).
 * Install [echttp](https://github.com/pascal-fb-martin/echttp)
 * Install [houseportal](https://github.com/pascal-fb-martin/houseportal)
