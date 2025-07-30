@@ -1,6 +1,6 @@
 # HouseDVR - A simple home web server To access CCTV recordings.
 #
-# Copyright 2024, Pascal Martin
+# Copyright 2025, Pascal Martin
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -16,10 +16,17 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor,
 # Boston, MA  02110-1301, USA.
+#
+# WARNING
+#
+# This Makefile depends on echttp and houseportal (dev) being installed.
+
+prefix=/usr/local
+SHARE=$(prefix)/share/house
+
+INSTALL=/usr/bin/install
 
 HAPP=housedvr
-HROOT=/usr/local
-SHARE=$(HROOT)/share/house
 STORE=/storage/motion/videos
 
 # Application build. --------------------------------------------
@@ -42,34 +49,25 @@ housedvr: $(OBJS)
 
 # Distribution agnostic file installation -----------------------
 
-install-ui:
-	mkdir -p $(SHARE)/public/dvr
-	chmod 755 $(SHARE) $(SHARE)/public $(SHARE)/public/dvr
-	cp public/* $(SHARE)/public/dvr
-	chown root:root $(SHARE)/public/dvr/*
-	chmod 644 $(SHARE)/public/dvr/*
+install-ui: install-preamble
+	$(INSTALL) -m 0755 -d $(DESTDIR)$(SHARE)/public/dvr
+	$(INSTALL) -m 0644 public/* $(DESTDIR)$(SHARE)/public/dvr
 
 install-app: install-ui
-	grep -q '^motion:' /etc/passwd || useradd -r motion -s /usr/sbin/nologin -d /var/lib/house
-	mkdir -p $(STORE)
-	chown -R motion $(STORE)
-	mkdir -p $(HROOT)/bin
-	mkdir -p /var/lib/house
-	mkdir -p /etc/house
-	rm -f $(HROOT)/bin/housedvr
-	cp housedvr $(HROOT)/bin
-	chown root:root $(HROOT)/bin/housedvr
-	chmod 755 $(HROOT)/bin/housedvr
-	touch /etc/default/housedvr
+	if [ "x$(DESTDIR)" = "x" ] ; then grep -q '^motion:' /etc/passwd || useradd -r motion -s /usr/sbin/nologin -d /var/lib/house ; fi
+	if [ "x$(DESTDIR)" = "x" ] ; then $(INSTALL) -m 0755 -d $(STORE) ; chown -R motion $(STORE) ; fi
+	$(INSTALL) -m 0755 -s housedvr $(DESTDIR)$(prefix)/bin
+	touch $(DESTDIR)/etc/default/housedvr
 
 uninstall-app:
-	rm -f $(HROOT)/bin/housedvr
-	rm -f $(SHARE)/public/dvr
+	rm -f $(DESTDIR)$(prefix)/bin/housedvr
+	rm -f $(DESTDIR)$(SHARE)/public/dvr
 
 purge-app:
 
 purge-config:
-	rm -rf /etc/house/dvr.config /etc/default/housedvr
+	rm -rf $(DESTDIR)/etc/house/dvr.config
+	rm -rf $(DESTDIR)/etc/default/housedvr
 
 # System installation. ------------------------------------------
 
