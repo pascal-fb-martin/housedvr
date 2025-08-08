@@ -1,0 +1,17 @@
+Source: housedvr
+Version: 1.0
+Section: Web servers
+Maintainer: Pascal Martin <pascal.fb.martin@gmail.com>
+Priority: optional
+Homepage: https://github.com/pascal-fb-martin/housedvr
+Standard-Version: 4.7.0
+Package: housedvr
+Architecture: {{arch}}
+Depends: 
+Description: A House service to collect and store security video recording
+ HouseDVR is part of the House suite of web services.
+ .
+ HouseDVR collects new security video recording from all detected CCTV
+ service (e.g. HouseMotion). It then makes these recording accessible on
+ its web UI.
+
