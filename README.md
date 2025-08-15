@@ -1,4 +1,5 @@
 # HouseDvr
+
 A web service to store and give access to video recordings
 
 ## Overview
@@ -57,6 +58,7 @@ The provided Makefile supports building private Debian packages. These are _not_
   no source package.
 
 To build a Debian package, use the `debian-package` target:
+
 ```
 make debian-package
 ```
