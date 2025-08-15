@@ -27,8 +27,7 @@ SHARE=$(prefix)/share/house
 INSTALL=/usr/bin/install
 
 HAPP=housedvr
-HMAN=/var/lib/house/note/content/manuals/automation
-HMANCACHE=/var/lib/house/note/cache
+HCAT=automation
 STORE=/storage/motion/videos
 
 # Application build. --------------------------------------------
@@ -54,9 +53,6 @@ housedvr: $(OBJS)
 install-ui: install-preamble
 	$(INSTALL) -m 0755 -d $(DESTDIR)$(SHARE)/public/dvr
 	$(INSTALL) -m 0644 public/* $(DESTDIR)$(SHARE)/public/dvr
-	$(INSTALL) -m 0755 -d $(DESTDIR)$(HMAN)
-	$(INSTALL) -m 0644 README.md $(DESTDIR)$(HMAN)/$(HAPP).md
-	rm -rf $(DESTDIR)$(HMANCACHE)/*
 
 install-runtime: install-preamble
 	if [ "x$(DESTDIR)" = "x" ] ; then grep -q '^motion:' /etc/passwd || useradd -r motion -s /usr/sbin/nologin -d /var/lib/house ; fi
@@ -69,8 +65,6 @@ install-app: install-ui install-runtime
 uninstall-app:
 	rm -f $(DESTDIR)$(prefix)/bin/housedvr
 	rm -f $(DESTDIR)$(SHARE)/public/dvr
-	rm -f $(DESTDIR)$(HMAN)/$(HAPP).md
-	rm -rf $(DESTDIR)$(HMANCACHE)/*
 
 purge-app:
 
