@@ -46,7 +46,7 @@ rebuild: clean all
 	gcc -c -Wall -g -O -o $@ $<
 
 housedvr: $(OBJS)
-	gcc -g -O -o housedvr $(OBJS) -lhouseportal -lechttp -lssl -lcrypto -lgpiod -lmagic -lrt
+	gcc -g -O -o housedvr $(OBJS) -lhouseportal -lechttp -lssl -lcrypto -lmagic -lrt
 
 # Distribution agnostic file installation -----------------------
 
