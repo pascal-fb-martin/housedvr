@@ -187,8 +187,8 @@ function drawCalendar (data) {
    var table = document.getElementsByClassName ('monthly')[0];
 
    // Remove all current content.
-   while (table.rows.length > 1) {
-      table.deleteRow(1);
+   while (table.rows.length > 0) {
+      table.deleteRow(0);
    }
 
    // Build the title bar.
