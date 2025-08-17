@@ -83,15 +83,12 @@ function clearDayEvents () {
    while (list.childNodes.length > 1) {
       list.removeChild(list.childNodes[1]);
    }
+   return list;
 }
 
 function drawDayEvents (data) {
-   var list = document.getElementsByClassName ('events')[0];
 
-   // Remove all current content.
-   while (list.childNodes.length > 1) {
-      list.removeChild(list.childNodes[1]);
-   }
+   var list = clearDayEvents ();
 
    // What is the size of the screen?
    var width = window.innerWidth;
@@ -111,7 +108,7 @@ function drawDayEvents (data) {
    }
 
    var table = document.createElement("table");
-   var row = document.createElement("tr");
+   var row = table.insertRow();
 
    data = data.sort (function (a, b) {
       return a.time.localeCompare(b.time);
@@ -134,18 +131,17 @@ function drawDayEvents (data) {
       }
       column ++;
       if (column > imageColumns) {
-         table.appendChild(row);
-         row = document.createElement("tr");
+         row = table.insertRow();
          column = 1;
       }
       var item = document.createElement("td");
       var subtable = document.createElement("table");
-      var subrow = document.createElement("tr");
+      var subrow = subtable.insertRow();
       var subitem = document.createElement("td");
       subitem.innerHTML = data[i].src + ' at ' + data[i].time;
       subrow.appendChild(subitem);
-      subtable.appendChild(subrow);
-      subrow = document.createElement("tr");
+
+      subrow = subtable.insertRow();
       subitem = document.createElement("td");
       subitem.id = 'video' + i;
       if (data[i].video.match (".mp4")) {
@@ -154,11 +150,9 @@ function drawDayEvents (data) {
          subitem.innerHTML = '<a href="' + data[i].video + '"><img src="' + data[i].image + '" style="width:100%;"></a>';
       }
       subrow.appendChild(subitem);
-      subtable.appendChild(subrow);
       item.appendChild(subtable);
       row.appendChild(item);
    }
-   if (column > 0) table.appendChild(row);
    list.appendChild(table);
 }
 
@@ -193,13 +187,13 @@ function drawCalendar (data) {
    var table = document.getElementsByClassName ('monthly')[0];
 
    // Remove all current content.
-   while (table.childNodes.length > 1) {
-      table.removeChild(table.childNodes[1]);
+   while (table.rows.length > 1) {
+      table.deleteRow(1);
    }
 
    // Build the title bar.
    var year = currentDate.getYear() + 1900;
-   var line = document.createElement("tr");
+   var line = table.insertRow();
    line.className = 'calendarTopTitle';
    var column = document.createElement("th");
    var button = document.createElement("button");
@@ -220,9 +214,8 @@ function drawCalendar (data) {
    button.onclick = nextMonth;
    column.appendChild(button);
    line.appendChild(column);
-   table.appendChild(line);
 
-   line = document.createElement("tr");
+   line = table.insertRow();
    line.className = 'calendarBottomTitle';
    for (var i = 0; i < 7; i++) {
       column = document.createElement("th");
@@ -230,20 +223,17 @@ function drawCalendar (data) {
       column.className = 'calendarDayTitle';
       line.appendChild(column);
    }
-   table.appendChild(line);
 
    var calendar = new Date(currentDate);
    calendar.setDate(1);
 
-   line = document.createElement("tr");
+   line = table.insertRow();
 
    // Add empty columns until the first day of the month.
-   var hasDay = false;
    for (var i = 0; i < calendar.getDay(); i++) {
       column = document.createElement("td");
       column.innerHTML = ' ';
       line.appendChild(column);
-      hasDay = true;
    }
 
    // Go through each day of this month (31 or less).
@@ -255,9 +245,7 @@ function drawCalendar (data) {
           // Start a new line for each new week.
           weekDay = calendar.getDay();
           if (weekDay == 0) {
-             table.appendChild(line);
-             line = document.createElement("tr");
-             hasDay = false;
+             line = null; // This line is done, new line only if needed.
           }
           if (weekDay < 7) {
              column = document.createElement("td");
@@ -270,14 +258,12 @@ function drawCalendar (data) {
              } else {
                column.innerHTML = ''+i;
              }
+             if (!line) line = table.insertRow();
              line.appendChild(column);
-             hasDay = true;
           }
       }
       calendar.setDate(dayOfMonth+1);
    }
-   if (hasDay) 
-      table.appendChild(line);
 }
 
 function showCameras (data) {
@@ -287,7 +273,7 @@ function showCameras (data) {
     if (data.dvr.feed.length < 12)
         columns = data.dvr.feed.length / 4; // Better looking with few cameras.
     column = Math.ceil(columns);
-    var line = document.createElement("tr");
+    var line = table.insertRow();
     var column = document.createElement("th");
     column.colspan = columns;
     column.innerHTML = 'CAMERAS';
@@ -295,10 +281,6 @@ function showCameras (data) {
     table.appendChild(line);
     line = null;
     for (var i = 0; i < data.dvr.feed.length; i++) {
-        if ((i % columns) == 0) {
-            if (line) table.appendChild(line);
-            line = null;
-        }
         var feed = data.dvr.feed[i];
         column = document.createElement("td");
         column.style = 'float: left';
@@ -313,7 +295,7 @@ function showCameras (data) {
         content.textContent = feed.name;
         content.htmlFor = feed.name;
         column.appendChild(content);
-        if (!line) line = document.createElement("tr");
+        if ((i % columns) == 0) line = table.insertRow(); // New line.
         line.appendChild(column);
     }
     if (line) table.appendChild(line);

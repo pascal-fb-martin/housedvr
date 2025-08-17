@@ -36,11 +36,11 @@ function friendlyTime (timestamp) {
 function listServers (data) {
    var table = document.getElementsByClassName ('servers')[0];
 
-   for (var i = table.childNodes.length - 1; i > 1; i--) {
-       table.removeChild(table.childNodes[i]);
+   for (var i = table.rows.length - 1; i > 0; i--) {
+       table.deleteRow(i);
    }
    for (var i = 0; i < data.dvr.servers.length; i++) {
-      var line = document.createElement("tr");
+      var line = table.insertRow();
       var server = data.dvr.servers[i];
 
       var column = document.createElement("td");
@@ -61,19 +61,17 @@ function listServers (data) {
       column = document.createElement("td");
       column.innerHTML = friendlyTime(server.timestamp);
       line.appendChild(column);
-
-      table.appendChild(line);
    }
 }
 
 function listCameras (data) {
    var table = document.getElementsByClassName ('cameras')[0];
 
-   for (var i = table.childNodes.length - 1; i > 1; i--) {
-       table.removeChild(table.childNodes[i]);
+   for (var i = table.rows.length - 1; i > 0; i--) {
+       table.deleteRow(i);
    }
    for (var i = 0; i < data.dvr.feed.length; i++) {
-      var line = document.createElement("tr");
+      var line = table.insertRow();
       var feed = data.dvr.feed[i];
 
       var column = document.createElement("td");
@@ -94,19 +92,17 @@ function listCameras (data) {
       column = document.createElement("td");
       column.innerHTML = friendlyTime(feed.timestamp);
       line.appendChild(column);
-
-      table.appendChild(line);
    }
 }
 
 function listStorage (data) {
    var table = document.getElementsByClassName ('storage')[0];
 
-   for (var i = table.childNodes.length - 1; i > 1; i--) {
-       table.removeChild(table.childNodes[i]);
+   for (var i = table.rows.length - 1; i > 0; i--) {
+       table.deleteRow(i);
    }
    for (var i = 0; i < data.dvr.storage.length; i++) {
-      var line = document.createElement("tr");
+      var line = table.insertRow();
 
       var column = document.createElement("td");
       column.innerHTML = data.dvr.storage[i].path;
@@ -123,23 +119,21 @@ function listStorage (data) {
       column = document.createElement("td");
       column.innerHTML = friendlySize (data.dvr.storage[i].free);
       line.appendChild(column);
-
-      table.appendChild(line);
    }
 }
 
 function listQueue (data) {
    var table = document.getElementsByClassName ('queue')[0];
 
-   for (var i = table.childNodes.length - 1; i > 1; i--) {
-       table.removeChild(table.childNodes[i]);
+   for (var i = table.rows.length - 1; i > 0; i--) {
+       table.deleteRow(i);
    }
    data.dvr.queue.sort (function (a, b) {
            return b.start - a.start;
    });
 
    for (var i = 0; i < data.dvr.queue.length; i++) {
-      var line = document.createElement("tr");
+      var line = table.insertRow();
       var queue = data.dvr.queue[i];
 
       var column = document.createElement("td");
@@ -167,8 +161,6 @@ function listQueue (data) {
       else
           column.innerHTML = '';
       line.appendChild(column);
-
-      table.appendChild(line);
    }
 }
 
