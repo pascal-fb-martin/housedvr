@@ -249,15 +249,12 @@ function drawCalendar (data) {
           }
           if (weekDay < 7) {
              column = document.createElement("td");
-             if (data[i]) {
-               button = document.createElement("button");
-               button.innerHTML = ''+i;
-               button.onclick = updateDayEvents;
-               button.day = ''+i;
-               column.appendChild(button);
-             } else {
-               column.innerHTML = ''+i;
-             }
+             button = document.createElement("button");
+             button.innerHTML = ''+i;
+             button.onclick = updateDayEvents;
+             button.day = ''+i;
+             button.disabled = data[i]?false:true;
+             column.appendChild(button);
              if (!line) line = table.insertRow();
              line.appendChild(column);
           }
