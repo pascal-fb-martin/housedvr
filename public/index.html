@@ -161,12 +161,12 @@ function updateDayEvents () {
    // Manage the selection in the calendar.
    if (currentSelection) {
       currentSelection.innerHTML = ''+currentSelection.day;
-      currentSelection.className = '';
+      currentSelection.className = 'housewidebutton';
    }
    this.innerHTML = '<b>'+this.day+'</b>';
    currentSelection = this;
 
-   this.className = 'houseactive';
+   this.className = 'houseactive housewidebutton';
 
    getDayEvents (this.day, function (data) {
       currentDayEvents = data;
