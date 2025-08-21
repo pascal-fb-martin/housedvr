@@ -197,8 +197,8 @@ function drawCalendar (data) {
    line.className = 'calendarTopTitle';
    var column = document.createElement("th");
    var button = document.createElement("button");
-   button.innerHTML = '<';
-   button.className = 'calendarTitleLeftButton';
+   button.innerHTML = '&#x25c0';
+   button.className = 'housewidebutton';
    button.onclick = previousMonth;
    column.appendChild(button);
    line.appendChild(column);
@@ -209,20 +209,11 @@ function drawCalendar (data) {
    line.appendChild(column);
    column = document.createElement("th");
    button = document.createElement("button");
-   button.innerHTML = '>';
-   button.className = 'calendarTitleRightButton';
+   button.innerHTML = '&#x25b6';
+   button.className = 'housewidebutton';
    button.onclick = nextMonth;
    column.appendChild(button);
    line.appendChild(column);
-
-   line = table.insertRow();
-   line.className = 'calendarBottomTitle';
-   for (var i = 0; i < 7; i++) {
-      column = document.createElement("th");
-      column.innerHTML = dayName[i];
-      column.className = 'calendarDayTitle';
-      line.appendChild(column);
-   }
 
    var calendar = new Date(currentDate);
    calendar.setDate(1);
@@ -253,6 +244,7 @@ function drawCalendar (data) {
              button.innerHTML = ''+i;
              button.onclick = updateDayEvents;
              button.day = ''+i;
+             button.className = 'housewidebutton';
              button.disabled = data[i]?false:true;
              column.appendChild(button);
              if (!line) line = table.insertRow();
