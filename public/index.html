@@ -14,6 +14,14 @@ var currentDayEvents = null;
 
 var cameraSelector = new Array();
 
+function getInput (id, default_value) {
+   var element = document.getElementById (id);
+   if (element) {
+      if (element.value) return parseInt(element.value, 10);
+   }
+   return default_value;
+}
+
 function previousMonth () {
    var month = currentDate.getMonth();
    if (month == 0) {
@@ -90,6 +98,10 @@ function drawDayEvents (data) {
 
    var list = clearDayEvents ();
 
+   var starthour = getInput ("starthour", 0);
+   var endhour = getInput ("endhour", 24);
+   if (starthour >= endhour) return;
+
    // What is the size of the screen?
    var width = window.innerWidth;
    var imageColumns = 6; // default for large windows.
@@ -129,6 +141,10 @@ function drawDayEvents (data) {
           if (cameraSelector[data[i].src])
               if (! cameraSelector[data[i].src].checked) continue;
       }
+      var hour = parseInt(data[i].time.split (':')[0], 10);
+      if (hour < starthour) continue;
+      if (hour >= endhour) continue;
+
       column ++;
       if (column > imageColumns) {
          row = table.insertRow();
@@ -174,7 +190,7 @@ function updateDayEvents () {
    });
 }
 
-function resizeDayEvents () {
+function refreshDayEvents () {
    if (currentDayEvents)
       drawDayEvents (currentDayEvents);
 }
@@ -277,7 +293,7 @@ function showCameras (data) {
         content.type = 'checkbox';
         content.innerHTML = feed.name;
         content.id = feed.name;
-        content.onclick = resizeDayEvents;
+        content.onclick = refreshDayEvents;
         column.appendChild(content);
         cameraSelector[feed.name] = content;
         content = document.createElement("label");
@@ -319,10 +335,12 @@ function getCameras () {
 function populate () {
    updateCalendar();
    getCameras();
+   document.getElementById ("starthour").addEventListener ("input", refreshDayEvents);
+   document.getElementById ("endhour").addEventListener ("input", refreshDayEvents);
 }
 
 window.onload = populate;
-window.onresize = resizeDayEvents;
+window.onresize = refreshDayEvents;
 </script>
 </head>
 <body>
@@ -353,6 +371,18 @@ window.onresize = resizeDayEvents;
             </td>
             <td>
                <table class="cameraselector">
+               </table>
+               <br>
+               <table class="cameraselector">
+               <tr><td>
+                  Hours from
+               </td><td>
+                  <input type="number" size="2" id="starthour" min="0" max="24" value="0">
+               </td><td>
+                  To
+               </td><td>
+                  <input type="number" size="2" id="endhour" min="0" max="24" value="24">
+               </td></tr>
                </table>
             </td>
          </tr>
