@@ -291,6 +291,7 @@ function showCameras (data) {
         column.style = 'float: left';
         var content = document.createElement("input");
         content.type = 'checkbox';
+        content.checked = true;
         content.innerHTML = feed.name;
         content.id = feed.name;
         content.onclick = refreshDayEvents;
