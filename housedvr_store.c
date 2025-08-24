@@ -63,10 +63,13 @@
 #include <sys/statvfs.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <fcntl.h>
 
 #include <echttp.h>
 #include <echttp_static.h>
 #include <echttp_json.h>
+
+#include <zip.h>
 
 #include "houselog.h"
 #include "housediscover.h"
@@ -80,14 +83,14 @@ static int HouseDvrMaxSpace = 0; // Default is no automatic cleanup.
 static const char *HouseDvrStorage = "/storage/motion/videos";
 static const char *HouseDvrUri =     "/dvr/storage/videos";
 
+static char WebBuffer[131072];
 
 const char *housedvr_store_root (void) {
     return HouseDvrStorage;
 }
 
 static const char *dvr_store_top (const char *method, const char *uri,
-                                        const char *data, int length) {
-    static char buffer[2048];
+                                  const char *data, int length) {
 
     int  cursor = 0;
     const char *sep = "[";
@@ -97,19 +100,19 @@ static const char *dvr_store_top (const char *method, const char *uri,
         struct dirent *p = readdir(dir);
         while (p) {
             if ((p->d_type == DT_DIR) && (isdigit(p->d_name[0]))) {
-                cursor += snprintf (buffer+cursor, sizeof(buffer)-cursor,
+                cursor += snprintf (WebBuffer+cursor, sizeof(WebBuffer)-cursor,
                                     "%s%s", sep, p->d_name);
-                if (cursor >= sizeof(buffer)) goto nospace;
+                if (cursor >= sizeof(WebBuffer)) goto nospace;
                 sep = ",";
             }
             p = readdir(dir);
         }
         closedir (dir);
     }
-    cursor += snprintf (buffer+cursor, sizeof(buffer)-cursor, "]");
-    if (cursor >= sizeof(buffer)) goto nospace;
+    cursor += snprintf (WebBuffer+cursor, sizeof(WebBuffer)-cursor, "]");
+    if (cursor >= sizeof(WebBuffer)) goto nospace;
     echttp_content_type_json();
-    return buffer;
+    return WebBuffer;
 
 nospace:
     echttp_error (413, "Out Of Space");
@@ -117,8 +120,7 @@ nospace:
 }
 
 static const char *dvr_store_yearly (const char *method, const char *uri,
-                                           const char *data, int length) {
-    static char buffer[2048];
+                                     const char *data, int length) {
 
     char path[1024];
     int  tail;
@@ -130,7 +132,7 @@ static const char *dvr_store_yearly (const char *method, const char *uri,
     tail = snprintf (path, sizeof(path), "%s/%d",
                      HouseDvrStorage, atoi(year));
 
-    cursor = snprintf (buffer, sizeof(buffer), "[false");
+    cursor = snprintf (WebBuffer, sizeof(WebBuffer), "[false");
 
     for (month = 1; month <= 12; ++month) {
         const char *found = ",false";
@@ -141,13 +143,13 @@ static const char *dvr_store_yearly (const char *method, const char *uri,
                 found = ",true";
             }
         }
-        cursor += snprintf (buffer+cursor, sizeof(buffer)-cursor, "%s", found);
-        if (cursor >= sizeof(buffer)) goto nospace;
+        cursor += snprintf (WebBuffer+cursor, sizeof(WebBuffer)-cursor, "%s", found);
+        if (cursor >= sizeof(WebBuffer)) goto nospace;
     }
-    cursor += snprintf (buffer+cursor, sizeof(buffer)-cursor, "]");
-    if (cursor >= sizeof(buffer)) goto nospace;
+    cursor += snprintf (WebBuffer+cursor, sizeof(WebBuffer)-cursor, "]");
+    if (cursor >= sizeof(WebBuffer)) goto nospace;
     echttp_content_type_json();
-    return buffer;
+    return WebBuffer;
 
 nospace:
     echttp_error (413, "Out Of Space");
@@ -155,10 +157,9 @@ nospace:
 }
 
 static const char *dvr_store_monthly (const char *method, const char *uri,
-                                            const char *data, int length) {
+                                      const char *data, int length) {
 
     int i;
-    static char buffer[2048];
 
     const char *year = echttp_parameter_get("year");
     const char *month = echttp_parameter_get("month");
@@ -184,7 +185,7 @@ static const char *dvr_store_monthly (const char *method, const char *uri,
         return "";
     }
 
-    cursor = snprintf (buffer, sizeof(buffer), "[false");
+    cursor = snprintf (WebBuffer, sizeof(WebBuffer), "[false");
 
     int referencemonth = local.tm_mon;
     struct stat info;
@@ -200,17 +201,17 @@ static const char *dvr_store_monthly (const char *method, const char *uri,
                 found = ",true";
             }
         }
-        cursor += snprintf (buffer+cursor, sizeof(buffer)-cursor, found);
-        if (cursor >= sizeof(buffer)) goto nospace;
+        cursor += snprintf (WebBuffer+cursor, sizeof(WebBuffer)-cursor, found);
+        if (cursor >= sizeof(WebBuffer)) goto nospace;
 
         base += 24*60*60;
         local = *localtime (&base);
         if (local.tm_mon != referencemonth) break;
     }
-    cursor += snprintf (buffer+cursor, sizeof(buffer)-cursor, "]");
-    if (cursor >= sizeof(buffer)) goto nospace;
+    cursor += snprintf (WebBuffer+cursor, sizeof(WebBuffer)-cursor, "]");
+    if (cursor >= sizeof(WebBuffer)) goto nospace;
     echttp_content_type_json();
-    return buffer;
+    return WebBuffer;
 
 nospace:
     echttp_error (413, "Out Of Space");
@@ -218,8 +219,7 @@ nospace:
 }
 
 static const char *dvr_store_daily (const char *method, const char *uri,
-                                          const char *data, int length) {
-    static char buffer[131072];
+                                    const char *data, int length) {
 
     char path[1024];
     int  tail;
@@ -231,6 +231,10 @@ static const char *dvr_store_daily (const char *method, const char *uri,
     const char *month = echttp_parameter_get("month");
     const char *day = echttp_parameter_get("day");
 
+    if (!year || !month || !day) {
+        echttp_error (400, "Missing parameters");
+        return "";
+    }
     if (month[0] == '0') month += 1;
     if (day[0] == '0') day += 1;
 
@@ -245,7 +249,7 @@ static const char *dvr_store_daily (const char *method, const char *uri,
               HouseDvrUri, year, atoi(month), atoi(day));
 
     const char *sep = "";
-    cursor = snprintf (buffer, sizeof(buffer), "[");
+    cursor = snprintf (WebBuffer, sizeof(WebBuffer), "[");
 
     for (;;) {
         char name[1024];
@@ -278,26 +282,139 @@ static const char *dvr_store_daily (const char *method, const char *uri,
         s = strrchr (image, '.');
         if (s) snprintf (s, sizeof(image)-(s-image), "%s", ".jpg");
 
-        cursor += snprintf (buffer+cursor, sizeof(buffer)-cursor,
+        cursor += snprintf (WebBuffer+cursor, sizeof(WebBuffer)-cursor,
                             "%s{\"src\":\"%s\",\"time\":\"%s\",\"size\":%ld"
                                 ",\"video\":\"%s/%s\",\"image\":\"%s/%s\"}",
                             sep, src, dtime, (long)(info.st_size),
                             vuri, p->d_name, vuri, image); 
         sep = ",";
-        if (cursor >= sizeof(buffer)) goto nospace;
+        if (cursor >= sizeof(WebBuffer)) goto nospace;
     }
 
-    cursor += snprintf (buffer+cursor, sizeof(buffer)-cursor, "]");
-    if (cursor >= sizeof(buffer)) goto nospace;
+    cursor += snprintf (WebBuffer+cursor, sizeof(WebBuffer)-cursor, "]");
+    if (cursor >= sizeof(WebBuffer)) goto nospace;
 
     closedir(dir);
     echttp_content_type_json();
-    return buffer;
+    return WebBuffer;
 
 nospace:
     closedir(dir);
     echttp_error (413, "Out Of Space");
     return "HTTP Error 413: Out of space, response too large";
+}
+
+static const char *dvr_store_download (const char *method, const char *uri,
+                                       const char *data, int length) {
+
+    const char *year = echttp_parameter_get("year");
+    const char *month = echttp_parameter_get("month");
+    const char *day = echttp_parameter_get("day");
+    const char *cams = echttp_parameter_get("cam");
+    const char *hours = echttp_parameter_get("hour");
+
+    if (!year || !month || !day) {
+        echttp_error (400, "Missing parameters");
+        return "";
+    }
+    if (month[0] == '0') month += 1;
+    if (day[0] == '0') day += 1;
+
+    const char *camlist[32];
+    int camcount = 0;
+    int starthour = 0;
+    int endhour = 24;
+
+    if (hours) {
+       starthour = atoi (hours);
+       hours = strchr (hours, '+');
+       if (hours) endhour = atoi (hours+1);
+    }
+
+    if (cams && (cams[0] != 0)) {
+        int i;
+        for (i = strlen(cams)-1; i > 0; --i) {
+            if (cams[i] == '+') {
+                camlist[camcount++] = cams + i + 1;
+                if (camcount >= 32) break;
+            }
+        }
+        if (camcount < 32) camlist[camcount++] = cams;
+    }
+
+    char path[1024];
+    int tail = snprintf (path, sizeof(path), "%s/%s/%02d/%02d",
+                         HouseDvrStorage, year, atoi(month), atoi(day));
+    DIR *dir = opendir (path);
+    if (!dir) {
+        echttp_error (404, "Not Found");
+        return "";
+    }
+
+    char archivename[1024];
+    snprintf (archivename, sizeof(archivename),
+              "/tmp/videos-%s-%s-%s.zip", year, month, day);
+    zip_t *archive = zip_open (archivename, ZIP_CREATE+ZIP_EXCL, 0);
+    if (!archive) goto failure;
+
+    for (;;) {
+        struct dirent *p = readdir(dir);
+        if (!p) break;
+        if (p->d_name[0] == '.') continue;
+
+        int t = atoi (p->d_name);
+        if ((t < starthour) || (t >= endhour)) continue;
+
+        const char *c = strchr (p->d_name, '-');
+        if (camcount) {
+            int i;
+            for (i = 0; i < camcount; ++i) {
+                int j;
+                int same = 1;
+                const char *ref = camlist[i];
+                for (j = 0; c[j] > 0; ++j) {
+                    if (ref[j] == c[j]) continue;
+                    if (c[j] == ':') {
+                        if (ref[j] == '+' || ref[j] <= 0) break; // Match.
+                    }
+                    same = 0;
+                    break;
+                }
+                if (same) break;
+            }
+            if (i >= camcount) continue; // Not a camera match.
+        }
+
+        snprintf (path+tail, sizeof(path)-tail, "/%s", p->d_name);
+        zip_source_t *source = zip_source_file (archive, path, 0, 0);
+        if (! source) goto failure;
+        int index = zip_file_add (archive, p->d_name,
+                                  source, ZIP_FL_ENC_UTF_8);
+        if (index < 0) goto failure;
+        zip_set_file_compression (archive, index, ZIP_CM_STORE, 0);
+    }
+
+    closedir(dir);
+    dir = 0;
+    zip_close (archive);
+    archive = 0;
+
+    struct stat info;
+    int fd = open (archivename, O_RDONLY);
+    if (fd < 0) goto failure;
+    fstat (fd, &info);
+    if (info.st_size > 0xffffffff) goto failure;
+    echttp_transfer (fd, info.st_size);
+    unlink (archivename); // So that the file will disappear once closed.
+    echttp_content_type_set ("application/zip");
+    return "";
+
+failure:
+    if (archive) zip_discard (archive);
+    if (dir) closedir(dir);
+    unlink (archivename); // Cleanup. Who cares if the file did not exist.
+    echttp_error (500, "Internal error");
+    return "";
 }
 
 void housedvr_store_initialize (int argc, const char **argv) {
@@ -316,6 +433,7 @@ void housedvr_store_initialize (int argc, const char **argv) {
     echttp_route_uri ("/dvr/storage/yearly", dvr_store_yearly);
     echttp_route_uri ("/dvr/storage/monthly", dvr_store_monthly);
     echttp_route_uri ("/dvr/storage/daily", dvr_store_daily);
+    echttp_route_uri ("/dvr/storage/download", dvr_store_download);
     echttp_static_route (HouseDvrUri, HouseDvrStorage);
 }
 
