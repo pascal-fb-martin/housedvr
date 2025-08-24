@@ -357,6 +357,7 @@ static const char *dvr_store_download (const char *method, const char *uri,
     zip_t *archive = zip_open (archivename, ZIP_CREATE+ZIP_EXCL, 0);
     if (!archive) goto failure;
 
+    int filecount = 0;
     for (;;) {
         struct dirent *p = readdir(dir);
         if (!p) break;
@@ -366,6 +367,8 @@ static const char *dvr_store_download (const char *method, const char *uri,
         if ((t < starthour) || (t >= endhour)) continue;
 
         const char *c = strchr (p->d_name, '-');
+        if (!c) goto failure;
+        c += 1; // Skip '-'.
         if (camcount) {
             int i;
             for (i = 0; i < camcount; ++i) {
@@ -392,7 +395,9 @@ static const char *dvr_store_download (const char *method, const char *uri,
                                   source, ZIP_FL_ENC_UTF_8);
         if (index < 0) goto failure;
         zip_set_file_compression (archive, index, ZIP_CM_STORE, 0);
+        filecount += 1;
     }
+    if (filecount <= 0) goto failure;
 
     closedir(dir);
     dir = 0;
