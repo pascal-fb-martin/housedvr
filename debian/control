@@ -7,7 +7,7 @@ Homepage: https://github.com/pascal-fb-martin/housedvr
 Standard-Version: 4.7.0
 Package: housedvr
 Architecture: {{arch}}
-Depends: houseportal
+Depends: houseportal,libzip4
 Description: A House service to collect and store security video recording
  HouseDVR is part of the House suite of web services.
  .
