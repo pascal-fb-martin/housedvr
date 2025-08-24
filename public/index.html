@@ -9,7 +9,7 @@ var dayName = new Array('Sun','Mon','Tue','Wed','Thu','Fri','Sat');
 var monthName = new Array('January','February','March','April','May','June','July','August','September','October','November','December');
 
 var currentDate = new Date();
-var currentSelection = null;
+var currentDaySelected = null;
 var currentDayEvents = null;
 
 var cameraSelector = new Array();
@@ -94,6 +94,50 @@ function clearDayEvents () {
    return list;
 }
 
+function selectedCamera () {
+   var cameras = new Array();
+   var allselected = true;
+   for (const cam in cameraSelector) {
+       if (cameraSelector[cam].checked) {
+           cameras.push (cam);
+       } else {
+           allselected = false;
+       }
+   }
+   if (cameras.length <= 0) return null; // No camera selected.
+   if (allselected) return ""; // No need for the HTTP parameter.
+   return cameras.join ('+');
+}
+
+function selectedTime () {
+   var starthour = getInput ("starthour", 0);
+   var endhour = getInput ("endhour", 24);
+   if (starthour == 0 && endhour == 24) return null;
+   return ''+starthour+'+'+endhour;
+}
+
+function downloadVideo () {
+
+   if (!currentDaySelected) return;
+
+   const downlink = document.createElement('a');
+   var year = currentDate.getYear() + 1900;
+   var month = currentDate.getMonth() + 1;
+   var day = currentDaySelected.day;
+   var req = "/dvr/storage/download?year=" + year + "&month=" + month + "&day=" + day;
+   hours = selectedTime();
+   if (hours) req += "&hour=" + hours;
+   cam = selectedCamera();
+   if (cam == null) return;
+   if (cam.length > 0) req += "&cam=" + cam;
+   downlink.href = req;
+   downlink.download = "videos-"+year+"-"+month+"-"+day+".zip";
+
+   document.body.appendChild(downlink);
+   downlink.click();
+   document.body.removeChild(downlink);
+}
+
 function drawDayEvents (data) {
 
    var list = clearDayEvents ();
@@ -175,12 +219,12 @@ function drawDayEvents (data) {
 function updateDayEvents () {
 
    // Manage the selection in the calendar.
-   if (currentSelection) {
-      currentSelection.innerHTML = ''+currentSelection.day;
-      currentSelection.className = 'housewidebutton';
+   if (currentDaySelected) {
+      currentDaySelected.innerHTML = ''+currentDaySelected.day;
+      currentDaySelected.className = 'housewidebutton';
    }
    this.innerHTML = '<b>'+this.day+'</b>';
-   currentSelection = this;
+   currentDaySelected = this;
 
    this.className = 'houseactive housewidebutton';
 
@@ -360,7 +404,7 @@ window.onresize = refreshDayEvents;
    <center>
       <table>
          <tr>
-            <td>
+            <td valign="top">
                <table class="monthlyBorder">
                <tr><td>
                <table class="monthly">
@@ -368,23 +412,36 @@ window.onresize = refreshDayEvents;
                </td></tr>
                </table>
             </td>
-            <td width="20%">
-            </td>
-            <td>
-               <table class="cameraselector">
-               </table>
-               <br>
-               <table class="cameraselector">
+            <td valign="top">
+            <table width="100%">
+            <tr><td>
+               <table width="100%">
+               <tr><th colspan="4">
+                  HOURS
+               </th></tr>
                <tr><td>
-                  Hours from
+                  from
                </td><td>
                   <input type="number" size="2" id="starthour" min="0" max="24" value="0">
                </td><td>
-                  To
+                  to
                </td><td>
                   <input type="number" size="2" id="endhour" min="0" max="24" value="24">
                </td></tr>
                </table>
+            </td></tr>
+            <tr><td>
+               <table width="100%" class="cameraselector">
+               </table>
+            </td></tr>
+            <tr><td>
+               <table width="100%">
+               <tr><td>
+                  <button class="housewidebutton" onclick="downloadVideo()">&#x25bd Download Selection</button>
+               </td></tr>
+               </table>
+            </td></tr>
+            </table>
             </td>
          </tr>
       </table>
