@@ -493,7 +493,7 @@ static void housedvr_feed_scanned
        if (fileinfo->length >= 4) {
            int stableitem = echttp_json_search (fileinfo, "[3]");
            if ((stableitem > 0) && (fileinfo[stableitem].type == PARSER_BOOL))
-               stable = fileinfo[stableitem].value.bool;
+               stable = fileinfo[stableitem].value.boolean;
        } else {
            int timeitem = echttp_json_search (fileinfo, "[0]");
            if ((timeitem > 0) && (fileinfo[timeitem].type == PARSER_INTEGER)) {
