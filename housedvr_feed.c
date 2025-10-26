@@ -375,6 +375,7 @@ static void housedvr_feed_scanned
    }
 
    if (status != 200) {
+       if (status == 304) return; // Nothing has changed, not an error.
        houselog_trace (HOUSE_FAILURE, server, "HTTP error %d", status);
        return;
    }
