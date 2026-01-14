@@ -445,7 +445,7 @@ static void housedvr_feed_scanned
        return;
    }
 
-   error = echttp_json_enumerate (Tokens+feeds, InnerList);
+   error = echttp_json_enumerate (Tokens+feeds, InnerList, TokensSize);
    if (error) {
        houselog_trace (HOUSE_FAILURE, path, "%s", error);
        return;
