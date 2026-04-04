@@ -258,7 +258,7 @@ static const char *dvr_store_daily (const char *method, const char *uri,
         if (!p) break;
         if (p->d_name[0] == '.') continue;
 
-        strncpy (name, p->d_name, sizeof(name));
+        memccpy (name, p->d_name, 0, sizeof(name));
         char *s = strrchr (name, '.');
         if (!s) continue;
         *(s++) = 0;
