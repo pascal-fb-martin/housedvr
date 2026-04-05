@@ -74,6 +74,7 @@
 
 #include <echttp.h>
 #include <echttp_json.h>
+#include <echttp_libc.h>
 
 #include "housediscover.h"
 #include "housedepositorstate.h"
@@ -170,11 +171,11 @@ static int housedvr_feed_server (const char *name, long long updated,
         } else {
             i = new;
         }
-        snprintf (Servers[i].name, sizeof(Servers[i].name), "%s", name);
+        memccpy (Servers[i].name, name, 0, sizeof(Servers[i].name));
         new = 1;
     }
     if (strcmp (Servers[i].adminurl, adminurl)) {
-        snprintf (Servers[i].adminurl, sizeof(Servers[i].adminurl), "%s", adminurl);
+        memccpy (Servers[i].adminurl, adminurl, 0, sizeof(Servers[i].adminurl));
     }
     Servers[i].timestamp = time(0);
 
@@ -227,11 +228,11 @@ static int housedvr_feed_register (const char *name,
     }
 
     if (strcmp (Feeds[i].url, url)) {
-        snprintf (Feeds[i].url, sizeof(Feeds[i].url), "%s", url);
+        memccpy (Feeds[i].url, url, 0, sizeof(Feeds[i].url));
         new = 1; // This location is new.
     }
     if (strcmp (Feeds[i].server, server)) {
-        snprintf (Feeds[i].server, sizeof(Feeds[i].server), "%s", server);
+        memccpy (Feeds[i].server, server, 0, sizeof(Feeds[i].server));
         new = 1; // This location is new.
     }
     Feeds[i].timestamp = now;
@@ -514,7 +515,8 @@ static void housedvr_feed_scanned
 static void housedvr_feed_scan (const char *serverurl) {
 
    char url[256];
-   snprintf (url, sizeof(url), "%s/status", serverurl);
+   char *end = url + sizeof(url);
+   stpecpy (stpecpy (url, end, serverurl), end, "/status");
 
    DEBUG ("Attempting status collection at %s\n", url);
    const char *error = echttp_client ("GET", url);
@@ -583,8 +585,8 @@ static void housedvr_feed_checked
 static void housedvr_feed_check (const char *serverurl) {
 
     char url[256];
-
-    snprintf (url, sizeof(url), "%s/check", serverurl);
+    char *end = url + sizeof(url);
+    stpecpy (stpecpy (url, end, serverurl), end, "/check");
 
     DEBUG ("Attempting discovery at %s\n", url);
     const char *error = echttp_client ("GET", url);

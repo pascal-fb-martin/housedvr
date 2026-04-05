@@ -68,6 +68,7 @@
 #include <echttp.h>
 #include <echttp_static.h>
 #include <echttp_json.h>
+#include <echttp_libc.h>
 
 #include <zip.h>
 
@@ -278,9 +279,10 @@ static const char *dvr_store_daily (const char *method, const char *uri,
         stat (path, &info);
 
         char image[1024];
-        snprintf (image, sizeof(image), "%s", p->d_name);
+        char *end = image + sizeof(image);
+        stpecpy (image, end, p->d_name);
         s = strrchr (image, '.');
-        if (s) snprintf (s, sizeof(image)-(s-image), "%s", ".jpg");
+        if (s) stpecpy (s, end, ".jpg");
 
         cursor += snprintf (WebBuffer+cursor, sizeof(WebBuffer)-cursor,
                             "%s{\"src\":\"%s\",\"time\":\"%s\",\"size\":%ld"
