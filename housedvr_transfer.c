@@ -72,6 +72,7 @@
 #include <echttp_static.h>
 #include <echttp_json.h>
 #include <echttp_hash.h> // Just for the signature.
+#include <echttp_libc.h>
 
 #include "houselog.h"
 #include "housediscover.h"
@@ -259,8 +260,8 @@ int housedvr_transfer_notify (const char *feed, const char *path, int size) {
         crashandburn (__FILE__, __LINE__); // Should never happen.
 
     cursor->signature = signature;
-    memccpy (cursor->feed, feed, 0, sizeof(cursor->feed));
-    memccpy (cursor->path, path, 0, sizeof(cursor->path));
+    strtcpy (cursor->feed, feed, sizeof(cursor->feed));
+    strtcpy (cursor->path, path, sizeof(cursor->path));
     cursor->size = size;
     cursor->offset = 0;
     cursor->state = TRANSFER_STATE_IDLE;

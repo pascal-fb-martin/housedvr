@@ -171,11 +171,11 @@ static int housedvr_feed_server (const char *name, long long updated,
         } else {
             i = new;
         }
-        memccpy (Servers[i].name, name, 0, sizeof(Servers[i].name));
+        strtcpy (Servers[i].name, name, sizeof(Servers[i].name));
         new = 1;
     }
     if (strcmp (Servers[i].adminurl, adminurl)) {
-        memccpy (Servers[i].adminurl, adminurl, 0, sizeof(Servers[i].adminurl));
+        strtcpy (Servers[i].adminurl, adminurl, sizeof(Servers[i].adminurl));
     }
     Servers[i].timestamp = time(0);
 
@@ -228,11 +228,11 @@ static int housedvr_feed_register (const char *name,
     }
 
     if (strcmp (Feeds[i].url, url)) {
-        memccpy (Feeds[i].url, url, 0, sizeof(Feeds[i].url));
+        strtcpy (Feeds[i].url, url, sizeof(Feeds[i].url));
         new = 1; // This location is new.
     }
     if (strcmp (Feeds[i].server, server)) {
-        memccpy (Feeds[i].server, server, 0, sizeof(Feeds[i].server));
+        strtcpy (Feeds[i].server, server, sizeof(Feeds[i].server));
         new = 1; // This location is new.
     }
     Feeds[i].timestamp = now;
