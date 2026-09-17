@@ -61,27 +61,12 @@ function getDayEvents (day, callback) {
 }
 
 function playVideo (link) {
-    var container = document.getElementById("videoframe");
+    var dialog = document.getElementById("videoframe");
     var player = document.getElementById("videoplayer");
     if (player) {
         player.innerHTML = '<video controls autoplay mute width="' + (window.innerWidth / 2) + '" height="auto"><source src="' + link + '" type="video/mp4"></video>';
-        var height = window.innerHeight / 2;
-        var top = window.innerHeight / 6;
-        container.style.width = 'auto';
-        container.style.height = height + 'px';
-        container.style.left = (window.innerWidth / 4) + 'px';
-        container.style.top = top + 'px';
-        container.style.display = 'block';
     }
-}
-
-function stopVideo () {
-    var container = document.getElementById("videoframe");
-    var player = document.getElementById("videoplayer");
-    if (player) {
-        player.innerHTML = '';
-        container.style.display = 'none';
-    }
+    dialog.showModal();
 }
 
 function clearDayEvents () {
@@ -449,13 +434,14 @@ window.onresize = refreshDayEvents;
    <br>
    <div class="events">
    </div>
-   <div id="videoframe" style="display: none; z-index: 1000; position: fixed; top: 300px; left: 100px; border-radius: 11px; border: 3px solid #2f2f2f; background-color: #FFFFFF; opacity: 1">
-      <center>
-         <button class="plugButton plugButtonEnabled" onclick="stopVideo()">Close</button>
-         <br>
+   <dialog id="videoframe">
+      <form method="dialog">
          <div id="videoplayer"></div>
-      </center>
-   </div>
+         <menu>
+         <button class="plugButton plugButtonEnabled" value="cancel">Close</button>
+         </menu>
+      </form>
+   </dialog>
    </article>
    </main>
 </body>
