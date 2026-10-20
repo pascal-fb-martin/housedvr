@@ -263,6 +263,8 @@ int housedvr_transfer_notify (const char *feed, const char *path, int size) {
         // will keep coming back anyway. If the problem persists, there
         // might be a logic problem: forcefully empty the queue.
         if (++TranferQueueFullWatchdog > 100) {
+            houselog_event ("TRANSFER", "dvr", "DEADLOCK",
+                            "DETECTED AT FILE %s FROM %s", path, feed);
             housedvr_transfer_drain ();
         }
         return 0;
