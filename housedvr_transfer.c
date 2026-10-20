@@ -82,12 +82,6 @@
 
 #define DEBUG if (echttp_isdebug()) printf
 
-#define TRANSFER_STATE_EMPTY  0 // MUST BE ZERO
-#define TRANSFER_STATE_IDLE   1
-#define TRANSFER_STATE_ACTIVE 2
-#define TRANSFER_STATE_DONE   3
-#define TRANSFER_STATE_FAILED 4
-
 // This module uses a queue of transfer requests. All transfers are
 // serialized: there is only one transfer going at any time.
 //
@@ -123,6 +117,12 @@
 // Using echttp_cache is not trivial because it does not have a "remove"
 // operation.)
 // 
+#define TRANSFER_STATE_EMPTY  0 // MUST BE ZERO
+#define TRANSFER_STATE_IDLE   1
+#define TRANSFER_STATE_ACTIVE 2
+#define TRANSFER_STATE_DONE   3
+#define TRANSFER_STATE_FAILED 4
+
 struct TransferFile {
     unsigned int signature;
     int state;
@@ -139,12 +139,21 @@ static int TransferQueueSize = 0;
 static int TransferConsumer = 0;
 static int TransferProducer = 0;
 
+static int TranferQueueFullWatchdog = 0; // Drain the queue when deadlocked
 
-static void crashandburn (const char *file, int line) {
+static void crashandburn (int line) {
     char *invalid = (char *)1;
-    printf ("Invalid programm state at %s line %d\n", file, line);
+    printf ("Invalid programm state at %s line %d\n", __FILE__, line);
     fflush (stdout);
     *invalid = 0; // Crash on purpose.
+}
+
+static void housedvr_transfer_drain (void) {
+   int i;
+   for (i = 0; i < TransferQueueSize; ++i) {
+       TransferQueue[i].state = TRANSFER_STATE_EMPTY;
+   }
+   TransferConsumer = TransferProducer = 0;
 }
 
 void housedvr_transfer_initialize (int argc, const char **argv) {
@@ -191,7 +200,7 @@ int housedvr_transfer_notify (const char *feed, const char *path, int size) {
             case TRANSFER_STATE_FAILED:
                 break; // Keep looking for a successful one.
             default:
-                crashandburn (__FILE__, __LINE__); // Should never happen.
+                crashandburn (__LINE__); // Should never happen.
         }
     }
 
@@ -213,7 +222,7 @@ int housedvr_transfer_notify (const char *feed, const char *path, int size) {
                 cursor->size = size; // Update the upcoming transfer.
                 return 1; // Already queued.
             default:
-                crashandburn (__FILE__, __LINE__); // Should never happen.
+                crashandburn (__LINE__); // Should never happen.
         }
     }
 
@@ -251,13 +260,19 @@ int housedvr_transfer_notify (const char *feed, const char *path, int size) {
     int next = housedvr_transfer_next(TransferProducer);
     if (next == TransferConsumer) {
         // The queue is full. Ignore this file for now. The notification
-        // will keep coming back anyway.
+        // will keep coming back anyway. If the problem persists, there
+        // might be a logic problem: forcefully empty the queue.
+        if (++TranferQueueFullWatchdog > 100) {
+            housedvr_transfer_drain ();
+        }
         return 0;
     }
+    TranferQueueFullWatchdog = 0;
+
     cursor = TransferQueue + TransferProducer;
     if ((cursor->state == TRANSFER_STATE_ACTIVE) ||
         (cursor->state == TRANSFER_STATE_IDLE))
-        crashandburn (__FILE__, __LINE__); // Should never happen.
+        crashandburn (__LINE__); // Should never happen.
 
     cursor->signature = signature;
     strtcpy (cursor->feed, feed, sizeof(cursor->feed));
@@ -300,10 +315,10 @@ static void housedvr_transfer_ready
     int total = atoi(ascii);
 
     struct TransferFile *item = TransferQueue + TransferConsumer;
-    if (origin != item)
-        crashandburn (__FILE__, __LINE__); // Should never happen.
-    if (item->state != TRANSFER_STATE_ACTIVE)
-        crashandburn (__FILE__, __LINE__); // Should never happen.
+    if ((origin != item) || (item->state != TRANSFER_STATE_ACTIVE)) {
+        echttp_abort (); // Kill this request. Maybe the queue was reset?
+        return;
+    }
 
     // Create the new file and write the already received data, if any.
     int fd = housedvr_transfer_open (item, status);
@@ -331,10 +346,10 @@ static void housedvr_transfer_complete
     }
 
     struct TransferFile *item = TransferQueue + TransferConsumer;
-    if (origin != item)
-        crashandburn (__FILE__, __LINE__); // Should never happen.
-    if (item->state != TRANSFER_STATE_ACTIVE)
-        crashandburn (__FILE__, __LINE__); // Should never happen.
+    if ((origin != item) || (item->state != TRANSFER_STATE_ACTIVE)) {
+        echttp_abort (); // Kill this request. Maybe the queue was reset?
+        return;
+    }
 
     if ((status / 100) == 2) {
         if (length > 0) {
@@ -355,7 +370,7 @@ static void housedvr_transfer_start (time_t now) {
     if (item->state == TRANSFER_STATE_ACTIVE) return; // Busy.
 
     if (item->state != TRANSFER_STATE_IDLE)
-        crashandburn (__FILE__, __LINE__); // Should never happen.
+        crashandburn (__LINE__); // Should never happen.
 
     item->state = TRANSFER_STATE_ACTIVE;
     item->initiated = now;
@@ -382,7 +397,7 @@ static void housedvr_transfer_end (time_t now, int status) {
 
     struct TransferFile *item = TransferQueue + TransferConsumer;
     if (item->state != TRANSFER_STATE_ACTIVE)
-        crashandburn (__FILE__, __LINE__); // Should never happen.
+        crashandburn (__LINE__); // Should never happen.
 
     if (status / 100 == 2) {
         char ascii[16];
@@ -440,7 +455,7 @@ int housedvr_transfer_status (char *buffer, int size) {
                 state = done;
                 break;
             default:
-                crashandburn (__FILE__,__LINE__);
+                crashandburn (__LINE__);
         }
         if (!state) continue; // Ignore empty slots.
 
@@ -463,7 +478,7 @@ int housedvr_transfer_status (char *buffer, int size) {
                 state = "";
                 break;
             default:
-                crashandburn (__FILE__,__LINE__);
+                crashandburn (__LINE__);
         }
 
         cursor += snprintf (buffer+cursor, size-cursor,
