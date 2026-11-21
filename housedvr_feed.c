@@ -374,12 +374,14 @@ static void housedvr_feed_scanned
        echttp_submit (0, 0, housedvr_feed_scanned, origin);
        return;
    }
+   if (status == 304) return; // Nothing has changed, not an error.
 
-   if (status != 200) {
-       if (status == 304) return; // Nothing has changed, not an error.
-       houselog_trace (HOUSE_FAILURE, server, "HTTP error %d", status);
+   if (!ECHTTP_SUCCESS(status)) {
+       houselog_trace (HOUSE_FAILURE, "scan",
+                       "%s: HTTP %d %s", server, status, echttp_reason());
        return;
    }
+   if (!data || !length) return; // No data to parse
 
    // Analyze the answer and retrieve the listed feeds.
    //
@@ -540,12 +542,17 @@ static void housedvr_feed_checked
        return;
    }
 
-   if (status != 200) {
-       houselog_trace (HOUSE_FAILURE, serverurl, "HTTP error %d", status);
+   if (!ECHTTP_SUCCESS(status)) {
        // If the target service does not support /check, force a status scan.
-       if (status == 401) housedvr_feed_scan (serverurl);
+       if (status == 401) {
+           housedvr_feed_scan (serverurl);
+           return;
+       }
+       houselog_trace (HOUSE_FAILURE, "scan",
+                       "%s: HTTP %d %s", serverurl, status, echttp_reason());
        return;
    }
+   if (!data || !length) return; // No data to parse
 
    // Analyze the answer and retrieve the check stamp.
    //
